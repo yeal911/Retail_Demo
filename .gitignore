@@ -1,0 +1,16 @@
+# env
+.env
+.env.*
+
+# node
+node_modules/
+
+# build
+dist/
+
+# IDE
+.idea/
+
+# other
+.codeartsdoer/
+*.db
