@@ -186,7 +186,7 @@ const mcpToolSchemas = [
 
 // ─── Tool Execution + ID Validation ──────────────────────────────
 
-async function executeTool(toolName, params, tenantId, data) {
+async function executeTool(toolName, params, tenantId, data, locale = "en") {
   const { stores, products } = normalizeData(data);
 
   // ID Validation
@@ -201,19 +201,19 @@ async function executeTool(toolName, params, tenantId, data) {
       const err = validateId(params.storeId, stores, "storeId");
       if (err) return { success: false, message: err };
       const { updateStoreStatus } = await import("../mcp/tools.js");
-      return await updateStoreStatus(params.storeId, params.status, tenantId);
+      return await updateStoreStatus(params.storeId, params.status, tenantId, locale);
     }
     case "setSalesTarget": {
       const err = validateId(params.storeId, stores, "storeId");
       if (err) return { success: false, message: err };
       const { setSalesTarget } = await import("../mcp/tools.js");
-      return await setSalesTarget(params.storeId, params.target, tenantId);
+      return await setSalesTarget(params.storeId, params.target, tenantId, locale);
     }
     case "adjustPricing": {
       const err = validateId(params.productId, products, "productId");
       if (err) return { success: false, message: err };
       const { adjustPricing } = await import("../mcp/tools.js");
-      return await adjustPricing(params.productId, params.newPrice, tenantId);
+      return await adjustPricing(params.productId, params.newPrice, tenantId, locale);
     }
     case "transferInventory": {
       const err1 = validateId(params.productId, products, "productId");
@@ -223,7 +223,7 @@ async function executeTool(toolName, params, tenantId, data) {
       const err3 = validateId(params.toStoreId, stores, "toStoreId");
       if (err3) return { success: false, message: err3 };
       const { transferInventory } = await import("../mcp/tools.js");
-      return await transferInventory(params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId);
+      return await transferInventory(params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId, locale);
     }
     case "restockProduct": {
       const err1 = validateId(params.productId, products, "productId");
@@ -231,7 +231,7 @@ async function executeTool(toolName, params, tenantId, data) {
       const err2 = validateId(params.storeId, stores, "storeId");
       if (err2) return { success: false, message: err2 };
       const { restockProduct } = await import("../mcp/tools.js");
-      return await restockProduct(params.productId, params.storeId, params.quantity, tenantId);
+      return await restockProduct(params.productId, params.storeId, params.quantity, tenantId, locale);
     }
     // ── Data Query Tools (on-demand) ──
     case "getStoreSales": {
@@ -532,7 +532,7 @@ export async function agent(data, question, locale = "en", tenantId, history = [
             return { type: "text", content: parsed.content || content };
           case "action": {
             // Fallback: LLM returned action as JSON instead of tool_call
-            const toolResult = await executeTool(parsed.tool, parsed.params, tenantId, data);
+            const toolResult = await executeTool(parsed.tool, parsed.params, tenantId, data, locale);
             return { type: "action", tool: parsed.tool, params: parsed.params, result: toolResult };
           }
           case "batch": {
@@ -551,7 +551,7 @@ export async function agent(data, question, locale = "en", tenantId, history = [
             const results = [];
             for (const store of matchingStores) {
               const params = { ...actionParams, storeId: store.id };
-              const result = await executeTool(tool, params, tenantId, data);
+              const result = await executeTool(tool, params, tenantId, data, locale);
               results.push({ storeId: store.id, storeName: store.name, result });
             }
             return { type: "batch", tool, filter, count: results.length, results };
@@ -588,7 +588,7 @@ export async function agent(data, question, locale = "en", tenantId, history = [
 
       if (QUERY_TOOLS.has(toolName)) {
         // ── Query tool: execute immediately, add result to conversation ──
-        const result = await executeTool(toolName, params, tenantId, data);
+        const result = await executeTool(toolName, params, tenantId, data, locale);
         messages.push({
           role: "tool",
           tool_call_id: tc.id,

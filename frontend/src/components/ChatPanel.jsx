@@ -134,7 +134,7 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
       const inventoryData = inventory.map((i) => ({ storeId: i.storeId, storeName: i.store?.name || "", productId: i.productId, productName: i.product?.name || "", quantity: i.quantity, reorderLevel: i.reorderLevel, lowStock: i.quantity <= i.reorderLevel }));
       const contextData = { stores: storesData, products: productsData, inventory: inventoryData };
 
-      const res = await llmExecute(actions, contextData, tenantId);
+      const res = await llmExecute(actions, contextData, tenantId, locale);
       const execResult = res.data.result;
       setMessages((prev) => [...prev.slice(0, msgIndex + 1), { role: "assistant", content: "", result: execResult }]);
       if ((execResult?.type === "action" || execResult?.type === "batch") && onActionComplete) {

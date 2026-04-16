@@ -26,8 +26,8 @@ export const llmQuery = (data, question, tenantId) =>
 export const llmAgent = (data, question, locale, tenantId, history) =>
   api.post("/api/llm/agent", { data, question, locale, tenantId, history });
 
-export const llmExecute = (actions, data, tenantId) =>
-  api.post("/api/llm/execute", { actions, data, tenantId });
+export const llmExecute = (actions, data, tenantId, locale) =>
+  api.post("/api/llm/execute", { actions, data, tenantId, locale });
 
 export const llmInsights = (data, locale, tenantId) =>
   api.post("/api/llm/insights", { data, locale, tenantId });

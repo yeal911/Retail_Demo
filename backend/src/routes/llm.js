@@ -32,14 +32,14 @@ router.post("/llm/agent", async (req, res) => {
 // ── Execute confirmed action ──
 router.post("/llm/execute", async (req, res) => {
   try {
-    const { actions, data, tenantId } = req.body;
+    const { actions, data, tenantId, locale } = req.body;
     if (!actions || !actions.length) return res.status(400).json({ success: false, message: "Actions required" });
 
     const { stores: storesData } = llmService._normalizeData(data);
     const results = [];
 
     for (const action of actions) {
-      const result = await llmService._executeTool(action.tool, action.params, tenantId, data);
+      const result = await llmService._executeTool(action.tool, action.params, tenantId, data, locale);
       const storeName = action.params.storeId ? storesData.find((s) => s.id === action.params.storeId)?.name : "";
       results.push({ tool: action.tool, params: action.params, result, storeName });
     }
