@@ -7,32 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ── Tenant & User ──────────────────────────────────────────────
+
 model Tenant {
-  id      String  @id @default(uuid())
-  name    String
-  users   User[]
-  stores  Store[]
+  id         String     @id @default(uuid())
+  name       String
+  users      User[]
+  stores     Store[]
+  categories Category[]
+  products   Product[]
 }
 
 model User {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   username  String
   password  String
-  role      String @default("user")
+  role      String  @default("user")
   tenantId  String?
   tenant    Tenant? @relation(fields: [tenantId], references: [id])
 }
 
+// ── Store & Sales ──────────────────────────────────────────────
+
 model Store {
-  id         String @id @default(uuid())
+  id         String         @id @default(uuid())
   name       String
   city       String
   manager    String
   status     String
   tenantId   String
-  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
   sales      Sale[]
   targets    SalesTarget[]
+  orders     Order[]
+  inventory  Inventory[]
 }
 
 model Sale {
@@ -42,7 +50,7 @@ model Sale {
   revenue   Float
   orders    Int
   avgTicket Float
-  store     Store @relation(fields: [storeId], references: [id])
+  store     Store    @relation(fields: [storeId], references: [id])
 }
 
 model SalesTarget {
@@ -51,11 +59,76 @@ model SalesTarget {
   year      Int
   month     Int
   target    Float
-  store     Store @relation(fields: [storeId], references: [id])
+  store     Store    @relation(fields: [storeId], references: [id])
   createdAt DateTime @default(now())
 
   @@unique([storeId, year, month])
 }
+
+// ── Product & Category ─────────────────────────────────────────
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  products  Product[]
+}
+
+model Product {
+  id         String      @id @default(uuid())
+  name       String
+  sku        String
+  price      Float
+  cost       Float
+  categoryId String
+  tenantId   String
+  category   Category    @relation(fields: [categoryId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  orderItems OrderItem[]
+  inventory  Inventory[]
+}
+
+// ── Order & OrderItem ──────────────────────────────────────────
+
+model Order {
+  id            String        @id @default(uuid())
+  storeId       String
+  date          DateTime
+  total         Float
+  paymentMethod String
+  status        String        @default("completed")
+  store         Store         @relation(fields: [storeId], references: [id])
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Float
+  subtotal  Float
+  order     Order   @relation(fields: [orderId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// ── Inventory ──────────────────────────────────────────────────
+
+model Inventory {
+  id            String    @id @default(uuid())
+  storeId       String
+  productId     String
+  quantity      Int
+  reorderLevel  Int       @default(20)
+  lastRestocked DateTime?
+  store         Store     @relation(fields: [storeId], references: [id])
+  product       Product   @relation(fields: [productId], references: [id])
+
+  @@unique([storeId, productId])
+}
+
+// ── Logs ──────────────────────────────────────────────────────
 
 model LlmLog {
   id        String   @id @default(uuid())

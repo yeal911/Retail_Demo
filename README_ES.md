@@ -38,9 +38,9 @@ Aplicación en http://localhost:5173
 
 | Usuario | Contraseña | Tenant |
 |---------|-----------|--------|
-| user1 | pass1 | Huawei MX |
-| user2 | pass2 | Telcel |
-| user3 | pass3 | Bimbo |
+| huawei | pass1 | Huawei MX |
+| telcel | pass2 | Telcel |
+| bimbo | pass3 | Bimbo |
 
 ## Configuración LLM
 
@@ -61,7 +61,8 @@ project-root/
 ├── frontend/          # Frontend React
 │   ├── src/pages/     # Login, Dashboard
 │   ├── src/components/ # KPI, SalesChart, StoreTable, ChatPanel
-│   │                   # AIInsights, LlmLogPanel, McpLogPanel
+│   │                   # AIInsights, ProductManagement, OrderManagement
+│   │                   # InventoryManagement, LlmLogPanel, McpLogPanel
 │   ├── src/api/       # request.js (Axios)
 │   ├── src/i18n.jsx   # Traducciones EN / ES
 │   └── src/styles.css  # Estilos globales + animaciones
@@ -69,33 +70,64 @@ project-root/
 ├── backend/           # Backend Node.js
 │   ├── src/routes/    # auth, store, llm
 │   ├── src/services/  # llmService (prompts i18n, 5 funciones IA)
-│   ├── src/mcp/       # tools.js (3 herramientas MCP + McpLog)
-│   └── prisma/        # schema.prisma (6 modelos), seed.js
+│   ├── src/mcp/       # tools.js (6 herramientas MCP + McpLog)
+│   └── prisma/        # schema.prisma (11 modelos), seed.js
 │
 ├── README.md          # Versión en Inglés
 ├── README_ES.md       # Este archivo (ES)
 └── TESTING_GUIDE.md   # Guía de pruebas
 ```
 
+## Modelo de Datos (11 Modelos)
+
+| Modelo | Propósito | Relaciones Clave |
+|--------|-----------|------------------|
+| Tenant | Aislamiento multi-tenant | 1:N → User, Store, Category, Product |
+| User | Autenticación | N:1 → Tenant |
+| Store | Tienda retail | 1:N → Sale, Order, Inventory, SalesTarget |
+| Sale | Resumen diario (agregado de Order) | N:1 → Store |
+| Product | Catálogo de productos | N:1 → Category, Tenant |
+| Category | Categoría de producto | N:1 → Tenant |
+| Order | Pedido de cliente | 1:N → OrderItem, N:1 → Store |
+| OrderItem | Línea de pedido | N:1 → Order, Product |
+| Inventory | Stock por tienda por producto | N:1 → Store, Product |
+| SalesTarget | Objetivo de ventas mensual | N:1 → Store |
+| LlmLog / McpLog | Registro de auditoría IA y operaciones | Independiente |
+
+**Consistencia de Datos**: `Sale.revenue = SUM(Order.total)`, `Sale.orders = COUNT(Order)` por tienda por día. Verificado por checks de consistencia en seed.
+
 ## Endpoints API
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | /api/login | Inicio de sesión |
-| GET | /api/stores?tenantId=xxx | Obtener datos de tiendas |
+| GET | /api/stores?tenantId=xxx | Obtener datos de tiendas con ventas |
+| PATCH | /api/stores/:id/status | Actualizar estado de tienda |
+| POST | /api/stores/:id/target | Establecer objetivo de ventas |
+| GET | /api/products?tenantId=xxx | Obtener catálogo de productos |
+| GET | /api/categories?tenantId=xxx | Obtener categorías |
+| GET | /api/orders?tenantId=xxx | Obtener pedidos con items |
+| GET | /api/inventory?tenantId=xxx | Obtener estado de inventario |
 | POST | /api/llm/query | Análisis de datos LLM |
 | POST | /api/llm/agent | Agente LLM (5 tipos de respuesta) |
 | POST | /api/llm/insights | Generar insights IA automáticamente |
 | GET | /api/llm/logs | Registros de llamadas IA |
-| GET | /api/mcp/logs | Registros de operaciones de tiendas |
+| GET | /api/mcp/logs | Registros de operaciones |
+| GET | /api/tenants | Listar tenants (admin) |
+| GET/PUT | /api/config | Configuración LLM |
 
-## Herramientas MCP
+## Herramientas MCP (6)
 
-| Herramienta | Parámetros | Descripción | Visibilidad UI |
-|------------|-----------|-------------|----------------|
-| updateStoreStatus | storeId, status | Actualizar estado de tienda | Columna estado en tabla |
-| setSalesTarget | storeId, target | Establecer objetivo de ventas | Columna "Objetivo Ventas" en tabla |
-| sendNotification | storeId, message | Enviar notificación | 🔔 Campana de notificaciones en sidebar |
+| Herramienta | Parámetros | Descripción | Auto-Refresh UI |
+|------------|-----------|-------------|-----------------|
+| updateStoreStatus | storeId, status | Actualizar estado de tienda | StoreTable ✅ |
+| setSalesTarget | storeId, target | Establecer objetivo de ventas | StoreTable ✅ |
+| sendNotification | storeId, message | Enviar notificación | Campana 🔔 ✅ |
+| adjustPricing | productId, newPrice | Ajustar precio de producto | ProductManagement ✅ |
+| transferInventory | productId, from, to, qty | Transferir stock entre tiendas | InventoryManagement ✅ |
+| restockProduct | productId, storeId, qty | Reabastecer producto | InventoryManagement ✅ |
+
+**Contexto LLM**: Las 6 herramientas son completamente funcionales porque el prompt del Agente incluye datos de Store + Product + Inventory, permitiendo al LLM referenciar IDs correctamente.
 
 ## Capacidades IA (5 Funciones)
 
@@ -107,13 +139,26 @@ project-root/
 | F4 | **Consulta NL** | Chat: "mostrar top 3 tiendas" | Lenguaje natural → tabla de datos de solo lectura |
 | F5 | **Sugerencias + Ejecutar** | Chat: "cómo optimizar?" | Tarjetas de sugerencias accionables con botón Ejecutar |
 
+## Navegación UI
+
+| Grupo | Páginas |
+|-------|---------|
+| Resumen | Dashboard (KPI + Gráficos + Insights IA) |
+| Operaciones | Tiendas (estadísticas + tabla), Inventario (filtros + estado stock) |
+| Producto y Ventas | Productos (catálogo + márgenes), Pedidos (productos inline + filtros) |
+| Análisis | Tendencia Ingresos, Comparar Ingresos, Comparar Pedidos, Comparar Ticket Prom. |
+| Sistema | Registros IA, Registros Operaciones |
+
 ## Características
 
 - **i18n**: Interfaz + prompts LLM en Inglés / Español con selector de idioma
 - **Sesión**: Persistencia de sesión en localStorage por 30 minutos
+- **Contexto LLM**: Datos de Store + Product + Inventory inyectados en el prompt del Agente
+- **Auto-actualización**: Todas las páginas de gestión se actualizan tras operaciones IA (mecanismo refreshKey)
+- **Consistencia de Datos**: Registros Sale derivados de agregación de Orders, no generados independientemente
+- **Seed Inteligente**: Reabastecimiento periódico (cada 5 días), distribución de pedidos entre semana/fin de semana
 - **Registros LLM**: Todas las llamadas IA registradas con entrada, salida, modelo, duración
-- **Registros MCP**: Todas las operaciones de tiendas registradas con herramienta, parámetros, resultado
-- **Auto-actualización**: Datos de tiendas se actualizan silenciosamente tras operaciones MCP (sin perder chat)
+- **Registros MCP**: Todas las operaciones registradas con herramienta, parámetros, resultado
 - **Moneda**: Formato MXN ($) para el mercado mexicano
 - **Notificaciones**: Icono de campana con contador para resultados de sendNotification
 - **Objetivo de Ventas**: Visible en tabla de tiendas, almacenado como registro Sale (fecha=2099)

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Input, Button, Card, Typography, Tag, Spin, Table } from "antd";
 import { SendOutlined, UserOutlined, ThunderboltOutlined, CheckCircleOutlined, BarChartOutlined, BulbOutlined, FileTextOutlined, RightOutlined } from "@ant-design/icons";
-import { llmAgent, getConfig } from "../api/request";
+import { llmAgent, getConfig, getProducts, getInventory } from "../api/request";
 import { useI18n } from "../i18n";
 import logo from "../assets/logo.png";
 
@@ -17,6 +17,8 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [modelName, setModelName] = useState("");
+  const [products, setProducts] = useState([]);
+  const [inventory, setInventory] = useState([]);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -24,6 +26,17 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
       if (res.data.success) setModelName(res.data.data.modelName);
     }).catch(() => {});
   }, []);
+
+  // Fetch products & inventory for LLM context
+  useEffect(() => {
+    if (!tenantId) return;
+    Promise.all([getProducts(tenantId), getInventory({ tenantId })])
+      .then(([pRes, iRes]) => {
+        if (pRes.data.success) setProducts(pRes.data.data);
+        if (iRes.data.success) setInventory(iRes.data.data);
+      })
+      .catch(() => {});
+  }, [tenantId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -38,7 +51,7 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
     setLoading(true);
 
     try {
-      const summaryData = stores.map((s) => ({
+      const storesData = stores.map((s) => ({
         id: s.id,
         name: s.name,
         city: s.city,
@@ -51,6 +64,27 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
           orders: d.orders,
         })),
       }));
+
+      const productsData = products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: p.price,
+        cost: p.cost,
+        category: p.category?.name || p.categoryId,
+      }));
+
+      const inventoryData = inventory.map((i) => ({
+        storeId: i.storeId,
+        storeName: i.store?.name || "",
+        productId: i.productId,
+        productName: i.product?.name || "",
+        quantity: i.quantity,
+        reorderLevel: i.reorderLevel,
+        lowStock: i.quantity <= i.reorderLevel,
+      }));
+
+      const summaryData = { stores: storesData, products: productsData, inventory: inventoryData };
 
       const res = await llmAgent(summaryData, question, locale, tenantId);
       const result = res.data.result;
@@ -151,9 +185,12 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
                   {item.impact && <div style={{ color: "#b45309", fontSize: 11, marginBottom: 4 }}>🎯 {t("suggestionImpact")}: {item.impact}</div>}
                   <Button size="small" type="primary" icon={<CheckCircleOutlined />}
                     onClick={async () => {
-                      try {
-                        const summaryData = stores.map((s) => ({ id: s.id, name: s.name, city: s.city, status: s.status, totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)), totalOrders: s.sales.reduce((a, b) => a + b.orders, 0) }));
-                        const res = await llmAgent(summaryData, JSON.stringify({ tool: item.tool, params: item.params }), locale, tenantId);
+                       try {
+                         const storesData = stores.map((s) => ({ id: s.id, name: s.name, city: s.city, status: s.status, totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)), totalOrders: s.sales.reduce((a, b) => a + b.orders, 0) }));
+                         const productsData = products.map((p) => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, cost: p.cost, category: p.category?.name || p.categoryId }));
+                         const inventoryData = inventory.map((i) => ({ storeId: i.storeId, storeName: i.store?.name || "", productId: i.productId, productName: i.product?.name || "", quantity: i.quantity, reorderLevel: i.reorderLevel, lowStock: i.quantity <= i.reorderLevel }));
+                         const summaryData = { stores: storesData, products: productsData, inventory: inventoryData };
+                         const res = await llmAgent(summaryData, JSON.stringify({ tool: item.tool, params: item.params }), locale, tenantId);
                         const r = res.data.result;
                         setMessages((prev) => [...prev, { role: "assistant", content: "", result: r }]);
                         if ((r?.type === "action" || r?.type === "batch") && onActionComplete) setTimeout(() => onActionComplete(), 500);

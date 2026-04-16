@@ -12,7 +12,7 @@ const translations = {
     username: "Username",
     password: "Password",
     login: "Sign In",
-    loginHint: "Test: user1 / pass1 | user2 / pass2 | user3 / pass3",
+    loginHint: "Test: huawei / pass1 | telcel / pass2 | bimbo / pass3",
     loginError: "Invalid username or password",
     loginFailed: "Login failed",
 
@@ -110,7 +110,20 @@ const translations = {
 
     // Menu categories
     businessManagement: "Business Management",
-    systemManagement: "System Management",
+    storeOps: "Store Ops",
+    productSales: "Product & Sales",
+    analytics: "Analytics",
+    systemManagement: "System",
+    inventoryManagement: "Inventory",
+    orderDate: "Date",
+    filterByStore: "Store",
+    filterByProduct: "Product",
+    filterByDate: "Date Range",
+    storeSummary: "Store Summary",
+    totalStores: "Total Stores",
+    inactiveStores: "Inactive",
+    avgRevenue: "Avg. Revenue",
+    avgOrders: "Avg. Orders",
 
     // Chart views
     revenueTrendView: "Revenue Trend",
@@ -146,6 +159,10 @@ const translations = {
     viewDetail: "Detail",
     lowStock: "Low",
     inStock: "OK",
+    outOfStock: "Out",
+    totalQuantity: "Total Qty",
+    startDate: "Start",
+    endDate: "End",
     llmApiUrl: "API URL",
     modelName: "Model Name",
     apiKey: "API Key",
@@ -164,7 +181,7 @@ const translations = {
     username: "Usuario",
     password: "Contraseña",
     login: "Iniciar Sesión",
-    loginHint: "Prueba: user1 / pass1 | user2 / pass2 | user3 / pass3",
+    loginHint: "Prueba: huawei / pass1 | telcel / pass2 | bimbo / pass3",
     loginError: "Usuario o contraseña incorrectos",
     loginFailed: "Error al iniciar sesión",
 
@@ -262,7 +279,20 @@ const translations = {
 
     // Menu categories
     businessManagement: "Gestión de Negocio",
-    systemManagement: "Gestión del Sistema",
+    storeOps: "Operaciones",
+    productSales: "Producto y Ventas",
+    analytics: "Análisis",
+    systemManagement: "Sistema",
+    inventoryManagement: "Inventario",
+    orderDate: "Fecha",
+    filterByStore: "Tienda",
+    filterByProduct: "Producto",
+    filterByDate: "Rango de Fechas",
+    storeSummary: "Resumen de Tiendas",
+    totalStores: "Total Tiendas",
+    inactiveStores: "Inactivas",
+    avgRevenue: "Ingresos Prom.",
+    avgOrders: "Pedidos Prom.",
 
     // Chart views
     revenueTrendView: "Tendencia Ingresos",
@@ -298,6 +328,10 @@ const translations = {
     viewDetail: "Detalle",
     lowStock: "Bajo",
     inStock: "OK",
+    outOfStock: "Agotado",
+    totalQuantity: "Cant. Total",
+    startDate: "Inicio",
+    endDate: "Fin",
     llmApiUrl: "URL de API",
     modelName: "Nombre del Modelo",
     apiKey: "Clave API",

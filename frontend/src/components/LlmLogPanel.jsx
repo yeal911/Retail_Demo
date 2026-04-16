@@ -56,7 +56,7 @@ export default function LlmLogPanel({ tenantId }) {
     },
     {
       title: t("llmDuration"), dataIndex: "duration", key: "duration", width: 80,
-      render: (v) => <span style={{ color: v > 3000 ? "#EF4444" : v > 1000 ? "#F59E0B" : "#10B981", fontWeight: 600 }}>{v}{t("llmMs")}</span>,
+      render: (v) => <span style={{ color: v > 3000 ? "#EF4444" : v > 1000 ? "#F59E0B" : "#10B981" }}>{v}{t("llmMs")}</span>,
       sorter: (a, b) => a.duration - b.duration,
     },
     {

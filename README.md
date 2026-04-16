@@ -38,9 +38,9 @@ App runs at http://localhost:5173
 
 | Username | Password | Tenant |
 |----------|----------|--------|
-| user1 | pass1 | Huawei MX |
-| user2 | pass2 | Telcel |
-| user3 | pass3 | Bimbo |
+| huawei | pass1 | Huawei MX |
+| telcel | pass2 | Telcel |
+| bimbo | pass3 | Bimbo |
 
 ## LLM Configuration
 
@@ -61,7 +61,8 @@ project-root/
 ├── frontend/          # React frontend
 │   ├── src/pages/     # Login, Dashboard
 │   ├── src/components/ # KPI, SalesChart, StoreTable, ChatPanel
-│   │                   # AIInsights, LlmLogPanel, McpLogPanel
+│   │                   # AIInsights, ProductManagement, OrderManagement
+│   │                   # InventoryManagement, LlmLogPanel, McpLogPanel
 │   ├── src/api/       # request.js (Axios)
 │   ├── src/i18n.jsx   # EN / ES translations
 │   └── src/styles.css  # Global styles + animations
@@ -69,33 +70,64 @@ project-root/
 ├── backend/           # Node.js backend
 │   ├── src/routes/    # auth, store, llm
 │   ├── src/services/  # llmService (i18n prompts, 5 AI features)
-│   ├── src/mcp/       # tools.js (3 MCP tools, DB-backed + McpLog)
-│   └── prisma/        # schema.prisma (6 models), seed.js
+│   ├── src/mcp/       # tools.js (6 MCP tools, DB-backed + McpLog)
+│   └── prisma/        # schema.prisma (11 models), seed.js
 │
 ├── README.md          # This file (EN)
 ├── README_ES.md       # Spanish version
 └── TESTING_GUIDE.md   # Comprehensive test guide
 ```
 
+## Data Model (11 Models)
+
+| Model | Purpose | Key Relations |
+|-------|---------|---------------|
+| Tenant | Multi-tenant isolation | 1:N → User, Store, Category, Product |
+| User | Authentication | N:1 → Tenant |
+| Store | Retail store | 1:N → Sale, Order, Inventory, SalesTarget |
+| Sale | Daily sales summary (aggregated from Order) | N:1 → Store |
+| Product | Product catalog | N:1 → Category, Tenant |
+| Category | Product category | N:1 → Tenant |
+| Order | Customer order | 1:N → OrderItem, N:1 → Store |
+| OrderItem | Order line item | N:1 → Order, Product |
+| Inventory | Stock per store per product | N:1 → Store, Product |
+| SalesTarget | Monthly sales target | N:1 → Store |
+| LlmLog / McpLog | AI & operation audit log | Standalone |
+
+**Data Consistency**: `Sale.revenue = SUM(Order.total)`, `Sale.orders = COUNT(Order)` per store per day. All verified by seed consistency checks.
+
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | /api/login | Login |
-| GET | /api/stores?tenantId=xxx | Get store data |
+| GET | /api/stores?tenantId=xxx | Get store data with sales |
+| PATCH | /api/stores/:id/status | Update store status |
+| POST | /api/stores/:id/target | Set sales target |
+| GET | /api/products?tenantId=xxx | Get product catalog |
+| GET | /api/categories?tenantId=xxx | Get categories |
+| GET | /api/orders?tenantId=xxx | Get orders with items |
+| GET | /api/inventory?tenantId=xxx | Get inventory status |
 | POST | /api/llm/query | LLM data analysis |
 | POST | /api/llm/agent | LLM Agent (5 response types) |
 | POST | /api/llm/insights | Auto-generate AI insights |
 | GET | /api/llm/logs | AI call logs |
 | GET | /api/mcp/logs | Store operation logs |
+| GET | /api/tenants | List tenants (admin) |
+| GET/PUT | /api/config | LLM configuration |
 
-## MCP Tools
+## MCP Tools (6)
 
-| Tool | Parameters | Description | UI Visibility |
-|------|-----------|-------------|---------------|
-| updateStoreStatus | storeId, status | Update store status | StoreTable status column |
-| setSalesTarget | storeId, target | Set sales target | StoreTable Sales Target column |
-| sendNotification | storeId, message | Send notification | Sidebar 🔔 notification bell |
+| Tool | Parameters | Description | UI Auto-Refresh |
+|------|-----------|-------------|-----------------|
+| updateStoreStatus | storeId, status | Update store status | StoreTable ✅ |
+| setSalesTarget | storeId, target | Set sales target | StoreTable ✅ |
+| sendNotification | storeId, message | Send notification | Bell 🔔 ✅ |
+| adjustPricing | productId, newPrice | Adjust product price | ProductManagement ✅ |
+| transferInventory | productId, from, to, qty | Transfer stock between stores | InventoryManagement ✅ |
+| restockProduct | productId, storeId, qty | Restock product | InventoryManagement ✅ |
+
+**LLM Context**: All 6 tools are fully functional because the Agent prompt includes Store + Product + Inventory data, enabling the LLM to correctly reference IDs.
 
 ## AI Capabilities (5 Features)
 
@@ -118,13 +150,26 @@ project-root/
 | `suggestions` | Actionable suggestions | Cards with Execute buttons |
 | `text` | Plain text answer | Formatted text |
 
+## UI Navigation
+
+| Group | Pages |
+|-------|-------|
+| Overview | Dashboard (KPI + Charts + AI Insights) |
+| Store Ops | Stores (summary stats + table), Inventory (filters + stock status) |
+| Product & Sales | Products (catalog + margins), Orders (inline products + filters) |
+| Analytics | Revenue Trend, Revenue Compare, Orders Compare, Avg Ticket Compare |
+| System | AI Call Logs, Store Operation Logs |
+
 ## Features
 
 - **i18n**: English / Spanish UI + LLM prompts with language switcher
 - **Session**: 30-minute localStorage session persistence
+- **LLM Context**: Store + Product + Inventory data injected into Agent prompt
+- **Auto-refresh**: All management pages refresh after AI operations (refreshKey mechanism)
+- **Data Consistency**: Sale records derived from Order aggregation, not independently generated
+- **Smart Seed**: Periodic restocking (every 5 days), weekday/weekend order distribution
 - **LLM Logs**: All AI calls recorded with input, output, model, duration
 - **MCP Logs**: All store operations recorded with tool, params, result
-- **Auto-refresh**: Store data updates silently after MCP operations (no chat loss)
 - **Currency**: MXN ($) format for Mexican market
 - **Notifications**: Bell icon with badge count for sendNotification results
-- **Sales Target**: Visible in StoreTable, stored as Sale record (date=2099)
+- **Sales Target**: Visible in storeTable, stored as Sale record (date=2099)

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
     Menu, Spin, Avatar, Typography, Dropdown, message, Button, Space,
+    Row, Col, Card, Statistic,
 } from "antd";
 import {
     DashboardOutlined, ShopOutlined, LogoutOutlined, UserOutlined,
     RobotOutlined, HistoryOutlined, ToolOutlined, SettingOutlined,
     MenuFoldOutlined, MenuUnfoldOutlined, LeftOutlined,
     LineChartOutlined, BarChartOutlined, TeamOutlined,
-    ShoppingOutlined, UnorderedListOutlined,
+    ShoppingOutlined, UnorderedListOutlined, InboxOutlined,
+    ShopFilled, CloseCircleOutlined, DollarOutlined, ShoppingCartOutlined,
 } from "@ant-design/icons";
 import { getStores } from "../api/request";
 import logo from "../assets/logo.png";
@@ -24,8 +26,15 @@ import ChartView from "../components/ChartView";
 import TenantManagement from "../components/TenantManagement";
 import ProductManagement from "../components/ProductManagement";
 import OrderManagement from "../components/OrderManagement";
+import InventoryManagement from "../components/InventoryManagement";
 
 const { Text } = Typography;
+
+function formatMXN(v) {
+  if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
+  return `$${v.toFixed(0)}`;
+}
 
 export default function Dashboard({ user, onLogout }) {
   const [stores, setStores] = useState([]);
@@ -34,6 +43,7 @@ export default function Dashboard({ user, onLogout }) {
   const [activeMenu, setActiveMenu] = useState("overview");
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const { t, locale, switchLocale } = useI18n();
 
   const isAdmin = user.role === "admin";
@@ -44,13 +54,14 @@ export default function Dashboard({ user, onLogout }) {
     null,
     { key: "aiConfig", icon: <SettingOutlined /> },
   ] : [
-    { key: "overview",         icon: <DashboardOutlined /> },
-    { key: "stores",           icon: <ShopOutlined /> },
-    { key: "products",         icon: <ShoppingOutlined /> },
-    { key: "orders",           icon: <UnorderedListOutlined /> },
-    { key: "revenueTrend",     icon: <LineChartOutlined /> },
-    { key: "revenueCompare",   icon: <BarChartOutlined /> },
-    { key: "ordersCompare",    icon: <BarChartOutlined /> },
+    { key: "overview",       icon: <DashboardOutlined /> },
+    { key: "stores",         icon: <ShopOutlined /> },
+    { key: "inventory",      icon: <InboxOutlined /> },
+    { key: "products",       icon: <ShoppingOutlined /> },
+    { key: "orders",         icon: <UnorderedListOutlined /> },
+    { key: "revenueTrend",   icon: <LineChartOutlined /> },
+    { key: "revenueCompare", icon: <BarChartOutlined /> },
+    { key: "ordersCompare",  icon: <BarChartOutlined /> },
     { key: "avgTicketCompare", icon: <BarChartOutlined /> },
     null,
     { key: "llmLogs",  icon: <HistoryOutlined /> },
@@ -75,7 +86,10 @@ export default function Dashboard({ user, onLogout }) {
     const totalRevenue = stores.reduce((sum, s) => sum + realSales(s.sales).reduce((a, b) => a + b.revenue, 0), 0);
     const totalOrders = stores.reduce((sum, s) => sum + realSales(s.sales).reduce((a, b) => a + b.orders, 0), 0);
     const activeStores = stores.filter((s) => s.status === "active").length;
+    const inactiveStores = stores.length - activeStores;
     const avgTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    const avgRevenue = stores.length > 0 ? totalRevenue / stores.length : 0;
+    const avgOrdersPerStore = stores.length > 0 ? totalOrders / stores.length : 0;
 
     const userMenu = {
         items: [{ key: "logout", icon: <LogoutOutlined />, label: t("logout"), onClick: onLogout }],
@@ -83,6 +97,45 @@ export default function Dashboard({ user, onLogout }) {
 
     const siderWidth = siderCollapsed ? 56 : 220;
     const chatWidth = chatCollapsed ? 40 : 360;
+
+    // ── Store Summary Card (#2) ──
+    const storeSummaryCard = activeMenu === "stores" && !isAdmin && (
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <Card style={{ borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }} styles={{ body: { padding: "12px 16px" } }}>
+            <Statistic title={t("totalStores")} value={stores.length}
+              valueStyle={{ color: "#4F46E5", fontSize: 24, fontWeight: 700 }}
+              prefix={<ShopFilled />} />
+            <div style={{ marginTop: 4, fontSize: 12, color: "#8c8c8c" }}>{t("last30Days")}</div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card style={{ borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }} styles={{ body: { padding: "12px 16px" } }}>
+            <Statistic title={t("activeStores")} value={activeStores}
+              valueStyle={{ color: "#10B981", fontSize: 24, fontWeight: 700 }} />
+            <div style={{ marginTop: 4, fontSize: 12, color: "#EF4444" }}>
+              <CloseCircleOutlined style={{ marginRight: 4 }} />{t("inactiveStores")}: <span style={{ fontWeight: 600, fontSize: 13 }}>{inactiveStores}</span>
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card style={{ borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }} styles={{ body: { padding: "12px 16px" } }}>
+            <Statistic title={t("avgRevenue")} value={avgRevenue} precision={0}
+              valueStyle={{ color: "#F59E0B", fontSize: 24, fontWeight: 700 }}
+              formatter={(v) => formatMXN(v)} />
+            <div style={{ marginTop: 4, fontSize: 12, color: "#8c8c8c" }}>{t("last30Days")}</div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card style={{ borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }} styles={{ body: { padding: "12px 16px" } }}>
+            <Statistic title={t("avgOrders")} value={avgOrdersPerStore} precision={0}
+              valueStyle={{ color: "#8B5CF6", fontSize: 24, fontWeight: 700 }}
+              formatter={(v) => v.toLocaleString()} />
+            <div style={{ marginTop: 4, fontSize: 12, color: "#8c8c8c" }}>{t("last30Days")}</div>
+          </Card>
+        </Col>
+      </Row>
+    );
 
     return (
         <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#f5f5f7" }}>
@@ -149,7 +202,6 @@ export default function Dashboard({ user, onLogout }) {
 
                 {/* Menu */}
                 {siderCollapsed ? (
-                    /* 折叠状态：完全自定义，不用 AntD Menu，避免 inline style 居中问题 */
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "4px 0" }}>
                         {collapsedMenuItems.map((item, i) =>
                             item === null ? (
@@ -179,7 +231,6 @@ export default function Dashboard({ user, onLogout }) {
                         )}
                     </div>
                 ) : (
-                    /* 展开状态：正常 AntD Menu */
                     <Menu
                         mode="inline"
                         selectedKeys={[activeMenu]}
@@ -197,12 +248,24 @@ export default function Dashboard({ user, onLogout }) {
                                 ],
                             },
                         ] : [
+                            // #5: Regrouped menu
                             {
-                                key: "biz", type: "group", label: t("businessManagement"), children: [
-                                    { key: "overview",         icon: <DashboardOutlined />, label: t("dataOverview") },
-                                    { key: "stores",           icon: <ShopOutlined />,      label: t("storeManagement") },
-                                    { key: "products",         icon: <ShoppingOutlined />,  label: t("productManagement") },
-                                    { key: "orders",           icon: <UnorderedListOutlined />, label: t("orderManagement") },
+                                key: "overview", icon: <DashboardOutlined />, label: t("dataOverview"),
+                            },
+                            {
+                                key: "g1", type: "group", label: t("storeOps"), children: [
+                                    { key: "stores",    icon: <ShopOutlined />,      label: t("storeManagement") },
+                                    { key: "inventory", icon: <InboxOutlined />,     label: t("inventoryManagement") },
+                                ],
+                            },
+                            {
+                                key: "g2", type: "group", label: t("productSales"), children: [
+                                    { key: "products",  icon: <ShoppingOutlined />,  label: t("productManagement") },
+                                    { key: "orders",    icon: <UnorderedListOutlined />, label: t("orderManagement") },
+                                ],
+                            },
+                            {
+                                key: "g3", type: "group", label: t("analytics"), children: [
                                     { key: "revenueTrend",     icon: <LineChartOutlined />, label: t("revenueTrendView") },
                                     { key: "revenueCompare",   icon: <BarChartOutlined />,  label: t("revenueCompareView") },
                                     { key: "ordersCompare",    icon: <BarChartOutlined />,  label: t("ordersCompareView") },
@@ -210,7 +273,7 @@ export default function Dashboard({ user, onLogout }) {
                                 ],
                             },
                             {
-                                key: "sys", type: "group", label: t("systemManagement"), children: [
+                                key: "g4", type: "group", label: t("systemManagement"), children: [
                                     { key: "llmLogs",  icon: <HistoryOutlined />, label: t("llmLogs") },
                                     { key: "mcpLogs",  icon: <ToolOutlined />,    label: t("mcpLogs") },
                                 ],
@@ -268,6 +331,8 @@ export default function Dashboard({ user, onLogout }) {
                                     <SalesChart stores={stores} selectedStore={selectedStore} />
                                 </>
                             )}
+                            {/* #2: Store summary card (above table) */}
+                            {storeSummaryCard}
                             {(activeMenu === "overview" || activeMenu === "stores") && !isAdmin && (
                                 <StoreTable
                                     stores={stores}
@@ -277,12 +342,16 @@ export default function Dashboard({ user, onLogout }) {
                                     onStoreChange={() => loadData(false)}
                                 />
                             )}
+                            {/* #3: Inventory as separate page */}
+                            {activeMenu === "inventory" && !isAdmin && (
+                                <InventoryManagement tenantId={tenantId} stores={stores} refreshKey={dataRefreshKey} />
+                            )}
                             {activeMenu === "llmLogs"          && <LlmLogPanel tenantId={tenantId} />}
                             {activeMenu === "mcpLogs"          && <McpLogPanel tenantId={tenantId} />}
                             {activeMenu === "aiConfig"         && <AIConfigPanel />}
                             {activeMenu === "tenants"          && <TenantManagement />}
-                            {activeMenu === "products"         && <ProductManagement tenantId={tenantId} stores={stores} />}
-                            {activeMenu === "orders"           && <OrderManagement tenantId={tenantId} stores={stores} />}
+                            {activeMenu === "products"         && <ProductManagement tenantId={tenantId} stores={stores} refreshKey={dataRefreshKey} />}
+                            {activeMenu === "orders"           && <OrderManagement tenantId={tenantId} stores={stores} refreshKey={dataRefreshKey} />}
                             {activeMenu === "revenueTrend"     && <ChartView stores={stores} mode="trend" />}
                             {activeMenu === "revenueCompare"   && <ChartView stores={stores} mode="revenue" />}
                             {activeMenu === "ordersCompare"    && <ChartView stores={stores} mode="orders" />}
@@ -324,7 +393,7 @@ export default function Dashboard({ user, onLogout }) {
                                 </div>
                             ) : (
                                 <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                                    <ChatPanel stores={stores} onActionComplete={() => loadData(false)} onCollapse={() => setChatCollapsed(true)} tenantId={tenantId} />
+                                    <ChatPanel stores={stores} onActionComplete={() => { loadData(false); setDataRefreshKey((k) => k + 1); }} onCollapse={() => setChatCollapsed(true)} tenantId={tenantId} />
                                 </div>
                             )}
                         </div>

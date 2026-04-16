@@ -1,32 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { Card, Table, Tag, Select, Spin } from "antd";
+import { Card, Table, Tag, Spin } from "antd";
 import { useI18n } from "../i18n";
-import { getProducts, getInventory } from "../api/request";
+import { getProducts } from "../api/request";
 
 const cardStyle = { borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)" };
 
-export default function ProductManagement({ tenantId, stores }) {
+export default function ProductManagement({ tenantId, refreshKey }) {
   const { t } = useI18n();
   const [products, setProducts] = useState([]);
-  const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("products");
 
   useEffect(() => {
     if (!tenantId) return;
     setLoading(true);
-    Promise.all([getProducts(tenantId), getInventory({ tenantId })])
-      .then(([pRes, iRes]) => {
+    getProducts(tenantId)
+      .then((pRes) => {
         if (pRes.data.success) setProducts(pRes.data.data);
-        if (iRes.data.success) setInventory(iRes.data.data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [tenantId]);
+  }, [tenantId, refreshKey]);
 
   if (loading) return <Spin />;
 
-  const productColumns = [
+  const columns = [
     { title: t("productName"), dataIndex: "name", key: "name" },
     { title: "SKU", dataIndex: "sku", key: "sku", width: 120 },
     { title: t("category"), key: "category", width: 120, render: (_, r) => r.category?.name || "-" },
@@ -41,34 +38,10 @@ export default function ProductManagement({ tenantId, stores }) {
     },
   ];
 
-  const invColumns = [
-    { title: t("productName"), key: "product", render: (_, r) => r.product?.name || "-" },
-    { title: "SKU", key: "sku", render: (_, r) => r.product?.sku || "-" },
-    { title: t("storeName"), key: "store", render: (_, r) => r.store?.name || "-" },
-    { title: t("quantity"), dataIndex: "quantity", key: "quantity", width: 80 },
-    {
-      title: t("status"), key: "status", width: 80,
-      render: (_, r) => <Tag color={r.quantity <= r.reorderLevel ? "red" : "green"}>{r.quantity <= r.reorderLevel ? t("lowStock") : t("inStock")}</Tag>,
-    },
-  ];
-
   return (
-    <div>
-      <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
-        <Select value={view} onChange={setView} style={{ width: 150 }} options={[
-          { value: "products", label: t("productList") },
-          { value: "inventory", label: t("inventoryView") },
-        ]} />
-      </div>
-      {view === "products" ? (
-        <Card title={t("productList")} style={cardStyle} styles={{ header: { borderBottom: "1px solid #f0f0f0", fontSize: 14, fontWeight: 600 } }}>
-          <Table columns={productColumns} dataSource={products} rowKey="id" size="middle" pagination={{ pageSize: 15 }} />
-        </Card>
-      ) : (
-        <Card title={t("inventoryView")} style={cardStyle} styles={{ header: { borderBottom: "1px solid #f0f0f0", fontSize: 14, fontWeight: 600 } }}>
-          <Table columns={invColumns} dataSource={inventory} rowKey="id" size="middle" pagination={{ pageSize: 20 }} />
-        </Card>
-      )}
-    </div>
+    <Card title={t("productList")} style={cardStyle}
+      styles={{ header: { borderBottom: "1px solid #f0f0f0", fontSize: 14, fontWeight: 600 } }}>
+      <Table columns={columns} dataSource={products} rowKey="id" size="middle" pagination={{ pageSize: 15 }} />
+    </Card>
   );
 }

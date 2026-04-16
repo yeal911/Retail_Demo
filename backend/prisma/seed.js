@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 开始生成测试数据...");
 
-  // 清空现有数据
+  // ── 清空现有数据（按外键依赖顺序）──
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.inventory.deleteMany();
@@ -18,7 +18,7 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 
-  // Create admin user
+  // ── 基础数据定义 ──
   await prisma.user.create({ data: { username: "admin", password: "admin", role: "admin" } });
   console.log("👤 admin / admin");
 
@@ -78,16 +78,16 @@ async function main() {
     },
   };
 
-  // ── Phase 1: 创建租户/用户/分类/商品/门店（少量，逐条即可）──
+  // ── Phase 1: 创建租户/用户/分类/商品/门店 ──
   const tenantIds = [];
-  const catIds = {};   // tenantIdx -> { catName -> id }
-  const prodIds = {};  // tenantIdx -> { sku -> id }
-  const storeIds = {}; // tenantIdx -> [storeId...]
+  const catIds = {};    // tenantIdx -> { catName -> id }
+  const prodIds = {};   // tenantIdx -> { sku -> id }
+  const storeIds = {};  // tenantIdx -> [storeId...]
 
   for (let t = 0; t < tenantNames.length; t++) {
     const tenant = await prisma.tenant.create({ data: { name: tenantNames[t] } });
     tenantIds.push(tenant.id);
-    await prisma.user.create({ data: { username: `user${t + 1}`, password: `pass${t + 1}`, tenantId: tenant.id } });
+    await prisma.user.create({ data: { username: tenantNames[t].split(" ")[0].toLowerCase(), password: `pass${t + 1}`, tenantId: tenant.id } });
 
     const tp = tenantProducts[tenantNames[t]];
     catIds[t] = {};
@@ -99,7 +99,9 @@ async function main() {
       catIds[t][catName] = cat.id;
     }
     for (const p of tp.products) {
-      const product = await prisma.product.create({ data: { name: p.name, sku: p.sku, price: p.price, cost: p.cost, categoryId: catIds[t][p.cat], tenantId: tenant.id } });
+      const product = await prisma.product.create({
+        data: { name: p.name, sku: p.sku, price: p.price, cost: p.cost, categoryId: catIds[t][p.cat], tenantId: tenant.id },
+      });
       prodIds[t][p.sku] = product.id;
     }
 
@@ -110,17 +112,19 @@ async function main() {
       });
       storeIds[t].push(store.id);
     }
-    console.log(`✅ ${tenantNames[t]}: user${t + 1}/pass${t + 1}, ${tp.categories.length} cats, ${tp.products.length} products, 15 stores`);
+    console.log(`✅ ${tenantNames[t]}: ${tenantNames[t].split(" ")[0].toLowerCase()}/pass${t + 1}, ${tp.categories.length} cats, ${tp.products.length} products, 15 stores`);
   }
 
-  // ── Phase 2: 内存构建所有批量数据 ──
-  console.log("⚡ 构建批量数据...");
-  const salesData = [];
-  const inventoryData = [];
+  // ── Phase 2: 初始化库存 (内存) + 生成订单 + 定期补货 + 扣减库存 ──
+  console.log("⚡ 构建订单与库存数据...");
+  const inventoryData = [];   // 最终写入 DB 的库存快照
   const ordersData = [];
   const orderItemsData = [];
+  const salesData = [];       // 从订单聚合，不再独立生成
   const paymentMethods = ["cash", "card", "transfer"];
   const now = new Date();
+  const RESTOCK_INTERVAL = 5;   // 每 5 天补一次货
+  const RESTOCK_TARGET = 300;   // 补货目标：每个商品补到 300 件
 
   for (let t = 0; t < tenantNames.length; t++) {
     const tp = tenantProducts[tenantNames[t]];
@@ -129,46 +133,61 @@ async function main() {
     for (let s = 0; s < 15; s++) {
       const storeId = storeIds[t][s];
 
-      // 库存
+      // ── 初始化库存 (内存中跟踪，用于扣减) ──
+      const stockMap = {};  // sku -> current quantity
       for (const p of products) {
-        inventoryData.push({
-          storeId,
-          productId: prodIds[t][p.sku],
-          quantity: 30 + Math.floor(Math.random() * 120),
-          reorderLevel: 20,
-        });
+        stockMap[p.sku] = RESTOCK_TARGET; // 初始库存 = 补货目标
       }
 
-      // 30天销售 + 订单
-      const baseRevenue = 3000 + Math.random() * 7000;
-      const baseOrders = 40 + Math.floor(Math.random() * 80);
+      // ── 每店基础参数 ──
+      const baseOrders = 30 + Math.floor(Math.random() * 50); // 30-80 单/天
 
+      // ── 30 天逐日生成订单 ──
       for (let d = 29; d >= 0; d--) {
         const date = new Date(now);
         date.setDate(date.getDate() - d);
         date.setHours(0, 0, 0, 0);
 
+        // ── 定期补货：每 RESTOCK_INTERVAL 天补一次 ──
+        const dayIndex = 29 - d; // 0 = oldest, 29 = today
+        if (dayIndex > 0 && dayIndex % RESTOCK_INTERVAL === 0) {
+          for (const p of products) {
+            if (stockMap[p.sku] < RESTOCK_TARGET) {
+              stockMap[p.sku] = RESTOCK_TARGET; // 补满到目标水位
+            }
+          }
+        }
+
         const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-        const weekdayFactor = isWeekend ? 1.2 : 1.0;
+        // 工作日因子：工作日 1.0，周末 1.3 (零售周末客流更大)
+        const weekdayFactor = isWeekend ? 1.3 : 1.0;
         const randomFactor = 0.85 + Math.random() * 0.3;
-        const revenue = Math.round(baseRevenue * weekdayFactor * randomFactor * 100) / 100;
-        const orders = Math.max(5, Math.round(baseOrders * weekdayFactor * (0.85 + Math.random() * 0.3)));
-        const avgTicket = Math.round((revenue / orders) * 100) / 100;
 
-        salesData.push({ storeId, date, revenue, orders, avgTicket });
+        // 当日目标订单数 (动态化，不再是固定 5)
+        const dailyOrderCount = Math.max(8, Math.round(baseOrders * weekdayFactor * randomFactor));
 
-        // 每天生成5个订单明细
-        for (let o = 0; o < 5; o++) {
+        let dailyRevenue = 0;
+
+        for (let o = 0; o < dailyOrderCount; o++) {
           const orderId = randomUUID();
-          const itemCount = 1 + Math.floor(Math.random() * 2);
+          const itemCount = 1 + Math.floor(Math.random() * 3); // 1-3 件/单
           let orderTotal = 0;
+          const itemsForThisOrder = [];
 
           for (let i = 0; i < itemCount; i++) {
+            // 随机选一个商品
             const p = products[Math.floor(Math.random() * products.length)];
-            const qty = 1 + Math.floor(Math.random() * 3);
+            // 根据库存决定购买数量 (1-3，不超过库存)
+            const maxQty = Math.min(3, stockMap[p.sku]);
+            if (maxQty <= 0) continue; // 库存不足，跳过此商品
+            const qty = 1 + Math.floor(Math.random() * maxQty);
             const subtotal = qty * p.price;
+
+            // 扣减库存
+            stockMap[p.sku] -= qty;
+
             orderTotal += subtotal;
-            orderItemsData.push({
+            itemsForThisOrder.push({
               orderId,
               productId: prodIds[t][p.sku],
               quantity: qty,
@@ -177,23 +196,53 @@ async function main() {
             });
           }
 
+          // 如果所有商品都没库存，跳过此订单
+          if (itemsForThisOrder.length === 0 || orderTotal === 0) continue;
+
+          dailyRevenue += orderTotal;
+
           ordersData.push({
             id: orderId,
             storeId,
             date,
-            total: orderTotal,
+            total: Math.round(orderTotal * 100) / 100,
             paymentMethod: paymentMethods[Math.floor(Math.random() * 3)],
             status: "completed",
           });
+          orderItemsData.push(...itemsForThisOrder);
         }
+
+        // ── Sale 从当日实际订单聚合 (核心改动！) ──
+        const actualOrderCount = ordersData.filter(
+          (od) => od.storeId === storeId && new Date(od.date).getTime() === date.getTime()
+        ).length;
+
+        if (actualOrderCount > 0) {
+          salesData.push({
+            storeId,
+            date,
+            revenue: Math.round(dailyRevenue * 100) / 100,
+            orders: actualOrderCount,
+            avgTicket: Math.round((dailyRevenue / actualOrderCount) * 100) / 100,
+          });
+        }
+      }
+
+      // ── 将最终库存快照写入 inventoryData ──
+      for (const p of products) {
+        inventoryData.push({
+          storeId,
+          productId: prodIds[t][p.sku],
+          quantity: Math.max(0, stockMap[p.sku]),
+          reorderLevel: 20,
+        });
       }
     }
   }
 
   // ── Phase 3: 批量写入 ──
-  console.log(`📦 写入: ${salesData.length} sales, ${inventoryData.length} inventory, ${ordersData.length} orders, ${orderItemsData.length} orderItems`);
+  console.log(`📦 写入: ${inventoryData.length} inventory, ${ordersData.length} orders, ${orderItemsData.length} orderItems, ${salesData.length} sales`);
 
-  // SQLite 单次 transaction 上限约 500 条，分批写入
   const BATCH = 500;
 
   const batchWrite = async (model, data) => {
@@ -203,9 +252,9 @@ async function main() {
   };
 
   await batchWrite(prisma.inventory, inventoryData);
-  await batchWrite(prisma.sale, salesData);
   await batchWrite(prisma.order, ordersData);
   await batchWrite(prisma.orderItem, orderItemsData);
+  await batchWrite(prisma.sale, salesData);
 
   // ── 统计 ──
   const stats = {
@@ -222,6 +271,20 @@ async function main() {
 
   console.log("\n📊 数据统计:");
   Object.entries(stats).forEach(([k, v]) => console.log(`   ${k}: ${v}`));
+
+  // ── 数据一致性校验 ──
+  console.log("\n🔍 数据一致性校验:");
+  const sampleStores = await prisma.store.findMany({ take: 3, include: { sales: true, orders: true } });
+  for (const store of sampleStores) {
+    for (const sale of store.sales.slice(0, 3)) {
+      const dayOrders = store.orders.filter((o) => new Date(o.date).toDateString() === new Date(sale.date).toDateString());
+      const orderRevenue = dayOrders.reduce((sum, o) => sum + o.total, 0);
+      const diff = Math.abs(sale.revenue - orderRevenue);
+      const ok = diff < 1; // 允许浮点误差 < $0.01
+      console.log(`   ${store.name} ${new Date(sale.date).toLocaleDateString()}: Sale.revenue=$${sale.revenue.toFixed(2)} vs SUM(Order.total)=$${orderRevenue.toFixed(2)} | orders: ${sale.orders} vs ${dayOrders.length} | ${ok ? "✅" : "❌ DIFF=$" + diff.toFixed(2)}`);
+    }
+  }
+
   console.log("\n✅ 测试数据生成完成!");
 }
 

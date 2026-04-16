@@ -14,3 +14,4 @@ dist/
 # other
 .codeartsdoer/
 *.db
+/backend/prisma/migrations/
