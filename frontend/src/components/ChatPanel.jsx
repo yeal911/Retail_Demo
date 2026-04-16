@@ -52,6 +52,26 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  // Build context data for LLM (stores + products + inventory)
+  const buildContextData = () => {
+    const storesData = stores.map((s) => ({
+      id: s.id, name: s.name, city: s.city, status: s.status,
+      totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)),
+      totalOrders: s.sales.reduce((a, b) => a + b.orders, 0),
+    }));
+    const productsData = products.map((p) => ({
+      id: p.id, name: p.name, sku: p.sku, price: p.price, cost: p.cost,
+      category: p.category?.name || p.categoryId,
+    }));
+    const inventoryData = inventory.map((i) => ({
+      storeId: i.storeId, storeName: i.store?.name || "",
+      productId: i.productId, productName: i.product?.name || "",
+      quantity: i.quantity, reorderLevel: i.reorderLevel,
+      lowStock: i.quantity <= i.reorderLevel,
+    }));
+    return { stores: storesData, products: productsData, inventory: inventoryData };
+  };
+
   const handleSend = async () => {
     const question = input.trim();
     if (!question || loading) return;
@@ -61,35 +81,7 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
     setLoading(true);
 
     try {
-      const storesData = stores.map((s) => ({
-        id: s.id,
-        name: s.name,
-        city: s.city,
-        status: s.status,
-        totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)),
-        totalOrders: s.sales.reduce((a, b) => a + b.orders, 0),
-      }));
-
-      const productsData = products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: p.price,
-        cost: p.cost,
-        category: p.category?.name || p.categoryId,
-      }));
-
-      const inventoryData = inventory.map((i) => ({
-        storeId: i.storeId,
-        storeName: i.store?.name || "",
-        productId: i.productId,
-        productName: i.product?.name || "",
-        quantity: i.quantity,
-        reorderLevel: i.reorderLevel,
-        lowStock: i.quantity <= i.reorderLevel,
-      }));
-
-      const summaryData = { stores: storesData, products: productsData, inventory: inventoryData };
+      const summaryData = buildContextData();
 
       // Build conversation history - extract human-readable summaries only
       const summarizeResult = (r) => {
@@ -129,10 +121,7 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
   const handleConfirmExecute = async (result, msgIndex) => {
     const actions = result.actions || [{ tool: result.tool, params: result.params }];
     try {
-      const storesData = stores.map((s) => ({ id: s.id, name: s.name, city: s.city, status: s.status, totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)), totalOrders: s.sales.reduce((a, b) => a + b.orders, 0) }));
-      const productsData = products.map((p) => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, cost: p.cost, category: p.category?.name || p.categoryId }));
-      const inventoryData = inventory.map((i) => ({ storeId: i.storeId, storeName: i.store?.name || "", productId: i.productId, productName: i.product?.name || "", quantity: i.quantity, reorderLevel: i.reorderLevel, lowStock: i.quantity <= i.reorderLevel }));
-      const contextData = { stores: storesData, products: productsData, inventory: inventoryData };
+      const contextData = buildContextData();
 
       const res = await llmExecute(actions, contextData, tenantId, locale);
       const execResult = res.data.result;
@@ -272,10 +261,7 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
                   <Button size="small" type="primary" icon={<CheckCircleOutlined />}
                     onClick={async () => {
                        try {
-                         const storesData = stores.map((s) => ({ id: s.id, name: s.name, city: s.city, status: s.status, totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)), totalOrders: s.sales.reduce((a, b) => a + b.orders, 0) }));
-                         const productsData = products.map((p) => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, cost: p.cost, category: p.category?.name || p.categoryId }));
-                         const inventoryData = inventory.map((i) => ({ storeId: i.storeId, storeName: i.store?.name || "", productId: i.productId, productName: i.product?.name || "", quantity: i.quantity, reorderLevel: i.reorderLevel, lowStock: i.quantity <= i.reorderLevel }));
-                         const summaryData = { stores: storesData, products: productsData, inventory: inventoryData };
+                          const summaryData = buildContextData();
                          const res = await llmAgent(summaryData, JSON.stringify({ tool: item.tool, params: item.params }), locale, tenantId);
                         const r = res.data.result;
                         setMessages((prev) => [...prev, { role: "assistant", content: "", result: r }]);

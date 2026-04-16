@@ -21,13 +21,13 @@ const msgs = {
     fail: { en: "Failed to adjust pricing", es: "Error al ajustar precio" },
   },
   transferInventory: {
-    en: (qty, from, to) => `Transferred ${qty} units from store ${from} to ${to}`,
-    es: (qty, from, to) => `Transferidas ${qty} unidades de tienda ${from} a ${to}`,
+    en: (productName, qty, from, to) => `Transferred ${qty} units of "${productName}" from "${from}" to "${to}"`,
+    es: (productName, qty, from, to) => `Transferidas ${qty} unidades de "${productName}" de "${from}" a "${to}"`,
     fail: { en: "Failed to transfer inventory", es: "Error al transferir inventario" },
   },
   restockProduct: {
-    en: (qty, total) => `Restocked ${qty} units, new total: ${total}`,
-    es: (qty, total) => `Reabastecidas ${qty} unidades, total actual: ${total}`,
+    en: (productName, storeName, qty, total) => `Restocked "${productName}" at "${storeName}" with ${qty} units, new total: ${total}`,
+    es: (productName, storeName, qty, total) => `Reabastecido "${productName}" en "${storeName}" con ${qty} unidades, total actual: ${total}`,
     fail: { en: "Failed to restock", es: "Error al reabastecer" },
   },
 };
@@ -55,14 +55,15 @@ async function logMcp(tool, params, result, storeId, tenantId) {
 }
 
 // ─── Tool Functions ───────────────────────────────────────────────
+// All name params come from context data (resolved in executeTool), no extra DB queries.
 
-export async function updateStoreStatus(storeId, status, tenantId, locale = "en") {
+export async function updateStoreStatus(storeId, status, tenantId, locale = "en", storeName) {
   const params = { storeId, status };
   const lang = t(locale);
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const store = await tx.store.update({ where: { id: storeId }, data: { status } });
-      return { success: true, message: msgs.updateStoreStatus[lang](store.name, status) };
+      await tx.store.update({ where: { id: storeId }, data: { status } });
+      return { success: true, message: msgs.updateStoreStatus[lang](storeName || storeId, status) };
     });
     await logMcp("updateStoreStatus", params, result, storeId, tenantId);
     return result;
@@ -74,22 +75,22 @@ export async function updateStoreStatus(storeId, status, tenantId, locale = "en"
   }
 }
 
-export async function setSalesTarget(storeId, target, tenantId, locale = "en") {
+export async function setSalesTarget(storeId, target, tenantId, locale = "en", storeName) {
   const params = { storeId, target };
   const lang = t(locale);
   try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
     const result = await prisma.$transaction(async (tx) => {
       const store = await tx.store.findUnique({ where: { id: storeId } });
       if (!store) return { success: false, message: `Store ${storeId} not found` };
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
       await tx.salesTarget.upsert({
         where: { storeId_year_month: { storeId, year, month } },
         update: { target: Number(target) },
         create: { storeId, year, month, target: Number(target) },
       });
-      return { success: true, message: msgs.setSalesTarget[lang](store.name, year, month, Number(target).toLocaleString()) };
+      return { success: true, message: msgs.setSalesTarget[lang](storeName || store.name, year, month, Number(target).toLocaleString()) };
     });
     await logMcp("setSalesTarget", params, result, storeId, tenantId);
     return result;
@@ -101,13 +102,13 @@ export async function setSalesTarget(storeId, target, tenantId, locale = "en") {
   }
 }
 
-export async function adjustPricing(productId, newPrice, tenantId, locale = "en") {
+export async function adjustPricing(productId, newPrice, tenantId, locale = "en", productName) {
   const params = { productId, newPrice };
   const lang = t(locale);
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const product = await tx.product.update({ where: { id: productId }, data: { price: Number(newPrice) } });
-      return { success: true, message: msgs.adjustPricing[lang](product.name, Number(newPrice).toLocaleString()) };
+      await tx.product.update({ where: { id: productId }, data: { price: Number(newPrice) } });
+      return { success: true, message: msgs.adjustPricing[lang](productName || productId, Number(newPrice).toLocaleString()) };
     });
     await logMcp("adjustPricing", params, result, null, tenantId);
     return result;
@@ -119,7 +120,7 @@ export async function adjustPricing(productId, newPrice, tenantId, locale = "en"
   }
 }
 
-export async function transferInventory(productId, fromStoreId, toStoreId, quantity, tenantId, locale = "en", fromStoreName, toStoreName) {
+export async function transferInventory(productId, fromStoreId, toStoreId, quantity, tenantId, locale = "en", productName, fromStoreName, toStoreName) {
   const params = { productId, fromStoreId, toStoreId, quantity };
   const lang = t(locale);
   try {
@@ -134,7 +135,7 @@ export async function transferInventory(productId, fromStoreId, toStoreId, quant
         update: { quantity: { increment: quantity } },
         create: { storeId: toStoreId, productId, quantity, reorderLevel: 20 },
       });
-      return { success: true, message: msgs.transferInventory[lang](quantity, fromStoreName || fromStoreId, toStoreName || toStoreId) };
+      return { success: true, message: msgs.transferInventory[lang](productName || productId, quantity, fromStoreName || fromStoreId, toStoreName || toStoreId) };
     });
     await logMcp("transferInventory", params, result, fromStoreId, tenantId);
     return result;
@@ -146,7 +147,7 @@ export async function transferInventory(productId, fromStoreId, toStoreId, quant
   }
 }
 
-export async function restockProduct(productId, storeId, quantity, tenantId, locale = "en") {
+export async function restockProduct(productId, storeId, quantity, tenantId, locale = "en", productName, storeName) {
   const params = { productId, storeId, quantity };
   const lang = t(locale);
   try {
@@ -155,7 +156,7 @@ export async function restockProduct(productId, storeId, quantity, tenantId, loc
         where: { storeId_productId: { storeId, productId } },
         data: { quantity: { increment: quantity }, lastRestocked: new Date() },
       });
-      return { success: true, message: msgs.restockProduct[lang](quantity, inv.quantity) };
+      return { success: true, message: msgs.restockProduct[lang](productName || productId, storeName || storeId, quantity, inv.quantity) };
     });
     await logMcp("restockProduct", params, result, storeId, tenantId);
     return result;

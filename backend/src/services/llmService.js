@@ -201,19 +201,19 @@ async function executeTool(toolName, params, tenantId, data, locale = "en") {
       const err = validateId(params.storeId, stores, "storeId");
       if (err) return { success: false, message: err };
       const { updateStoreStatus } = await import("../mcp/tools.js");
-      return await updateStoreStatus(params.storeId, params.status, tenantId, locale);
+      return await updateStoreStatus(params.storeId, params.status, tenantId, locale, stores.find((s) => s.id === params.storeId)?.name);
     }
     case "setSalesTarget": {
       const err = validateId(params.storeId, stores, "storeId");
       if (err) return { success: false, message: err };
       const { setSalesTarget } = await import("../mcp/tools.js");
-      return await setSalesTarget(params.storeId, params.target, tenantId, locale);
+      return await setSalesTarget(params.storeId, params.target, tenantId, locale, stores.find((s) => s.id === params.storeId)?.name);
     }
     case "adjustPricing": {
       const err = validateId(params.productId, products, "productId");
       if (err) return { success: false, message: err };
       const { adjustPricing } = await import("../mcp/tools.js");
-      return await adjustPricing(params.productId, params.newPrice, tenantId, locale);
+      return await adjustPricing(params.productId, params.newPrice, tenantId, locale, products.find((p) => p.id === params.productId)?.name);
     }
     case "transferInventory": {
       const err1 = validateId(params.productId, products, "productId");
@@ -223,9 +223,12 @@ async function executeTool(toolName, params, tenantId, data, locale = "en") {
       const err3 = validateId(params.toStoreId, stores, "toStoreId");
       if (err3) return { success: false, message: err3 };
       const { transferInventory } = await import("../mcp/tools.js");
-      const fromName = stores.find((s) => s.id === params.fromStoreId)?.name;
-      const toName = stores.find((s) => s.id === params.toStoreId)?.name;
-      return await transferInventory(params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId, locale, fromName, toName);
+      return await transferInventory(
+        params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId, locale,
+        products.find((p) => p.id === params.productId)?.name,
+        stores.find((s) => s.id === params.fromStoreId)?.name,
+        stores.find((s) => s.id === params.toStoreId)?.name,
+      );
     }
     case "restockProduct": {
       const err1 = validateId(params.productId, products, "productId");
@@ -233,7 +236,11 @@ async function executeTool(toolName, params, tenantId, data, locale = "en") {
       const err2 = validateId(params.storeId, stores, "storeId");
       if (err2) return { success: false, message: err2 };
       const { restockProduct } = await import("../mcp/tools.js");
-      return await restockProduct(params.productId, params.storeId, params.quantity, tenantId, locale);
+      return await restockProduct(
+        params.productId, params.storeId, params.quantity, tenantId, locale,
+        products.find((p) => p.id === params.productId)?.name,
+        stores.find((s) => s.id === params.storeId)?.name,
+      );
     }
     // ── Data Query Tools (on-demand) ──
     case "getStoreSales": {
@@ -333,7 +340,7 @@ Note: The Store Data above already includes totalRevenue and totalOrders (30-day
 ## Instructions
 - Prefer using data already in the prompt over making tool calls. Only call tools when the existing data is genuinely insufficient.
 - Use the provided tools to execute operations when the user requests them
-- For batch operations (e.g., "close all low stores"), call the tool multiple times for each matching store
+- For batch operations (e.g., "close all low stores"), call the tool multiple times for each matching store IN A SINGLE RESPONSE — do NOT call one at a time across multiple turns
 - For queries and analysis that don't require tool execution, respond with structured JSON
 - Always use actual IDs from the data above
 - When adjusting prices, find the product ID from the Product Catalog
@@ -395,7 +402,7 @@ Nota: Los Datos de Tiendas arriba ya incluyen totalRevenue y totalOrders (agrega
 ## Instrucciones
 - Prefiere usar los datos ya disponibles en el prompt sobre hacer llamadas a herramientas. Solo llama herramientas cuando los datos existentes sean genuinamente insuficientes.
 - Usa las herramientas proporcionadas para ejecutar operaciones cuando el usuario las solicite
-- Para operaciones por lote (ej. "cerrar tiendas de bajo rendimiento"), llama la herramienta múltiples veces para cada tienda que coincida
+- Para operaciones por lote (ej. "cerrar tiendas de bajo rendimiento"), llama la herramienta múltiples veces para cada tienda que coincida EN UNA SOLA RESPUESTA — NO llames una a la vez en múltiples turnos
 - Para consultas y análisis que no requieren ejecución de herramientas, responde con JSON estructurado
 - Siempre usa IDs reales de los datos arriba
 - Al ajustar precios, busca el ID de producto del Catálogo
@@ -496,7 +503,8 @@ export async function agent(data, question, locale = "en", tenantId, history = [
   // Add current question as the last user message
   messages.push({ role: "user", content: question });
   const executedActions = [];  // Track all executed tool calls
-  const MAX_TURNS = 5;        // Prevent infinite loops
+  const pendingActions = [];  // Accumulate mutation actions across turns (confirm all at once)
+  const MAX_TURNS = 10;       // Allow enough turns for batch operations
 
   // ── Multi-turn tool calling loop ──
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -507,8 +515,22 @@ export async function agent(data, question, locale = "en", tenantId, history = [
       tenantId,
     });
 
-    // No tool calls → LLM is done, parse the final response
+    // No tool calls → LLM is done
     if (toolCalls.length === 0) {
+      // If we accumulated pending mutations, return confirmation for ALL of them
+      if (pendingActions.length > 0) {
+        if (pendingActions.length === 1) {
+          const action = pendingActions[0];
+          return { type: "confirmation", tool: action.tool, params: action.params, description: action.description };
+        }
+        return {
+          type: "confirmation",
+          tool: pendingActions[0].tool,
+          description: pendingActions.map((a) => a.description).join("\n"),
+          actions: pendingActions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
+        };
+      }
+
       // If we executed actions, return the last action result
       if (executedActions.length > 0) {
         const lastAction = executedActions[executedActions.length - 1];
@@ -567,10 +589,8 @@ export async function agent(data, question, locale = "en", tenantId, history = [
       return { type: "text", content };
     }
 
-    // ── Tool calls found → Split into query (execute immediately) and mutation (confirm) ──
+    // ── Tool calls found → Split into query (execute immediately) and mutation (accumulate) ──
     const QUERY_TOOLS = new Set(["getStoreSales", "getInventoryStatus"]);
-    const queryResults = [];   // Execute immediately
-    const pendingActions = []; // Need confirmation
 
     // Add assistant message with tool_calls to conversation
     messages.push({
@@ -596,9 +616,8 @@ export async function agent(data, question, locale = "en", tenantId, history = [
           tool_call_id: tc.id,
           content: JSON.stringify(result),
         });
-        queryResults.push({ tool: toolName, params, result });
       } else {
-        // ── Mutation tool: collect for confirmation ──
+        // ── Mutation tool: accumulate for batch confirmation ──
         const description = describeTool(toolName, params, data, locale);
         const storeName = params.storeId ? storesData.find((s) => s.id === params.storeId)?.name : "";
         pendingActions.push({ tool: toolName, params, description, storeName, toolCallId: tc.id });
@@ -611,26 +630,25 @@ export async function agent(data, question, locale = "en", tenantId, history = [
       }
     }
 
-    // If there are mutation tools → return confirmation (query results already executed)
-    if (pendingActions.length > 0) {
-      if (pendingActions.length === 1) {
-        const action = pendingActions[0];
-        return { type: "confirmation", tool: action.tool, params: action.params, description: action.description };
-      }
-      return {
-        type: "confirmation",
-        tool: pendingActions[0].tool,
-        description: pendingActions.map((a) => a.description).join("\n"),
-        actions: pendingActions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
-      };
-    }
-
-    // Only query tools were called → continue loop so LLM can process the results and answer
-    // (The query results are already in the conversation, LLM will see them next turn)
+    // Continue loop — LLM may make more tool calls (e.g., batch operations calling one at a time)
+    // Confirmation will be returned when LLM stops calling tools (toolCalls.length === 0)
     continue;
   }
 
-  // Max turns reached → return what we have
+  // Max turns reached → return confirmation if we have pending actions, otherwise error
+  if (pendingActions.length > 0) {
+    if (pendingActions.length === 1) {
+      const action = pendingActions[0];
+      return { type: "confirmation", tool: action.tool, params: action.params, description: action.description };
+    }
+    return {
+      type: "confirmation",
+      tool: pendingActions[0].tool,
+      description: pendingActions.map((a) => a.description).join("\n"),
+      actions: pendingActions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
+    };
+  }
+
   if (executedActions.length > 0) {
     const lastAction = executedActions[executedActions.length - 1];
     if (executedActions.length === 1) {
