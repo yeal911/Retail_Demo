@@ -101,15 +101,24 @@ router.get("/categories", async (req, res) => {
 // ── Orders ──
 router.get("/orders", async (req, res) => {
   try {
-    const { tenantId, storeId, page = 1, pageSize = 20 } = req.query;
+    const { tenantId, storeId, productId, startDate, endDate, sortBy = "date", sortOrder = "desc", page = 1, pageSize = 20 } = req.query;
     const where = {};
     if (storeId) where.storeId = storeId;
     else if (tenantId) where.store = { tenantId };
+    if (productId) where.items = { some: { productId } };
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date.gte = new Date(startDate);
+      if (endDate) where.date.lte = new Date(endDate);
+    }
+    const allowedSortFields = { date: "date", total: "total", paymentMethod: "paymentMethod" };
+    const orderField = allowedSortFields[sortBy] || "date";
+    const orderDir = sortOrder === "asc" ? "asc" : "desc";
     const [data, total] = await Promise.all([
       prisma.order.findMany({
         where,
         include: { items: { include: { product: true } }, store: { select: { name: true } } },
-        orderBy: { date: "desc" },
+        orderBy: { [orderField]: orderDir },
         skip: (Number(page) - 1) * Number(pageSize),
         take: Number(pageSize),
       }),

@@ -17,11 +17,21 @@ export default function OrderManagement({ tenantId, stores, refreshKey }) {
   const [storeId, setStoreId] = useState(null);
   const [productId, setProductId] = useState(null);
   const [dateRange, setDateRange] = useState(null);
+  const [sorter, setSorter] = useState({ field: "date", order: "desc" });
 
-  const loadData = (p = page, sid = storeId) => {
+  const loadData = (p = page, sid = storeId, pid = productId, dr = dateRange, s = sorter) => {
     setLoading(true);
     const params = { tenantId, page: p, pageSize: 20 };
     if (sid) params.storeId = sid;
+    if (pid) params.productId = pid;
+    if (dr && dr[0] && dr[1]) {
+      params.startDate = dr[0].startOf("day").toISOString();
+      params.endDate = dr[1].endOf("day").toISOString();
+    }
+    if (s.field) {
+      params.sortBy = s.field;
+      params.sortOrder = s.order === "ascend" ? "asc" : "desc";
+    }
     getOrders(params).then((res) => {
       if (res.data.success) { setOrders(res.data.data); setTotal(res.data.total); }
     }).catch(() => {}).finally(() => setLoading(false));
@@ -36,28 +46,15 @@ export default function OrderManagement({ tenantId, stores, refreshKey }) {
     loadData();
   }, [tenantId, refreshKey]);
 
-  useEffect(() => { if (tenantId) loadData(1, storeId); }, [storeId]);
+  useEffect(() => { if (tenantId) loadData(1, storeId, productId, dateRange, sorter); }, [storeId, productId, dateRange, sorter]);
 
   const paymentColors = { cash: "green", card: "blue", transfer: "orange" };
-
-  // Client-side filter by product and date range
-  const filteredOrders = orders.filter((o) => {
-    if (productId) {
-      const hasProduct = o.items?.some((item) => item.productId === productId);
-      if (!hasProduct) return false;
-    }
-    if (dateRange && dateRange[0] && dateRange[1]) {
-      const orderDate = new Date(o.date);
-      if (orderDate < dateRange[0].startOf("day").toDate() || orderDate > dateRange[1].endOf("day").toDate()) return false;
-    }
-    return true;
-  });
 
   const columns = [
     {
       title: t("orderDate"), dataIndex: "date", key: "date", width: 100,
       render: (v) => new Date(v).toLocaleDateString(),
-      sorter: (a, b) => new Date(a.date) - new Date(b.date),
+      sorter: true,
     },
     { title: t("storeName"), key: "store", width: 140, render: (_, r) => r.store?.name || "-" },
     {
@@ -69,10 +66,15 @@ export default function OrderManagement({ tenantId, stores, refreshKey }) {
         return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
       },
     },
-    { title: t("total"), dataIndex: "total", key: "total", width: 100, render: (v) => `$${v?.toLocaleString()}`, sorter: (a, b) => a.total - b.total },
     {
-      title: t("paymentMethod"), dataIndex: "paymentMethod", key: "payment", width: 100,
+      title: t("total"), dataIndex: "total", key: "total", width: 100,
+      render: (v) => `$${v?.toLocaleString()}`,
+      sorter: true,
+    },
+    {
+      title: t("paymentMethod"), dataIndex: "paymentMethod", key: "paymentMethod", width: 100,
       render: (v) => <Tag color={paymentColors[v] || "default"}>{v}</Tag>,
+      sorter: true,
     },
     { title: t("items"), key: "items", width: 60, render: (_, r) => r.items?.length || 0 },
   ];
@@ -109,14 +111,19 @@ export default function OrderManagement({ tenantId, stores, refreshKey }) {
         />
       </div>
 
-      <Card title={`${t("orderList")} (${filteredOrders.length})`} style={cardStyle}
+      <Card title={`${t("orderList")} (${total})`} style={cardStyle}
         styles={{ header: { borderBottom: "1px solid #f0f0f0", fontSize: 14, fontWeight: 600 } }}>
         <Table
           columns={columns}
-          dataSource={filteredOrders}
+          dataSource={orders}
           rowKey="id"
           size="middle"
           loading={loading}
+          onChange={(_pagination, _filters, sort) => {
+            const newSorter = sort.field ? { field: sort.field, order: sort.order } : { field: "date", order: "desc" };
+            setSorter(newSorter);
+            setPage(1);
+          }}
           pagination={{ current: page, pageSize: 20, total, onChange: (p) => { setPage(p); loadData(p); } }}
         />
       </Card>

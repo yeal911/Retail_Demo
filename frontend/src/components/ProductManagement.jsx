@@ -27,13 +27,18 @@ export default function ProductManagement({ tenantId, refreshKey }) {
     { title: t("productName"), dataIndex: "name", key: "name" },
     { title: "SKU", dataIndex: "sku", key: "sku", width: 120 },
     { title: t("category"), key: "category", width: 120, render: (_, r) => r.category?.name || "-" },
-    { title: t("price"), dataIndex: "price", key: "price", width: 100, render: (v) => `$${v?.toLocaleString()}` },
-    { title: t("cost"), dataIndex: "cost", key: "cost", width: 100, render: (v) => `$${v?.toLocaleString()}` },
+    { title: t("price"), dataIndex: "price", key: "price", width: 100, render: (v) => `$${v?.toLocaleString()}`, sorter: (a, b) => a.price - b.price },
+    { title: t("cost"), dataIndex: "cost", key: "cost", width: 100, render: (v) => `$${v?.toLocaleString()}`, sorter: (a, b) => a.cost - b.cost },
     {
       title: t("margin"), key: "margin", width: 80,
       render: (_, r) => {
         const m = r.price > 0 ? ((r.price - r.cost) / r.price * 100).toFixed(1) : 0;
         return <Tag color={m > 40 ? "green" : m > 20 ? "orange" : "red"}>{m}%</Tag>;
+      },
+      sorter: (a, b) => {
+        const ma = a.price > 0 ? (a.price - a.cost) / a.price : 0;
+        const mb = b.price > 0 ? (b.price - b.cost) / b.price : 0;
+        return ma - mb;
       },
     },
   ];
