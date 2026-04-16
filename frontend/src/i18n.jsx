@@ -12,7 +12,7 @@ const translations = {
     username: "Username",
     password: "Password",
     login: "Sign In",
-    loginHint: "Test: huawei / pass1 | telcel / pass2 | bimbo / pass3",
+    loginHint: "Test: admin / admin | huawei / pass1 | telcel / pass2 | bimbo / pass3",
     loginError: "Invalid username or password",
     loginFailed: "Login failed",
 
@@ -181,7 +181,7 @@ const translations = {
     username: "Usuario",
     password: "Contraseña",
     login: "Iniciar Sesión",
-    loginHint: "Prueba: huawei / pass1 | telcel / pass2 | bimbo / pass3",
+    loginHint: "Prueba: admin / admin | huawei / pass1 | telcel / pass2 | bimbo / pass3",
     loginError: "Usuario o contraseña incorrectos",
     loginFailed: "Error al iniciar sesión",
 

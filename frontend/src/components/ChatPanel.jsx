@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, memo } from "react";
 import { Input, Button, Card, Typography, Tag, Spin, Table } from "antd";
 import { SendOutlined, UserOutlined, ThunderboltOutlined, CheckCircleOutlined, BarChartOutlined, BulbOutlined, FileTextOutlined, RightOutlined } from "@ant-design/icons";
 import { llmAgent, getConfig, getProducts, getInventory } from "../api/request";
@@ -7,7 +7,7 @@ import logo from "../assets/logo.png";
 
 const { Text } = Typography;
 
-export default function ChatPanel({ stores, onActionComplete, onCollapse, tenantId }) {
+export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, tenantId }) {
   const { t, locale } = useI18n();
   const dateLocale = locale === "es" ? "es-MX" : "en-US";
 
@@ -271,4 +271,4 @@ export default function ChatPanel({ stores, onActionComplete, onCollapse, tenant
       </div>
     </div>
   );
-}
+});

@@ -40,7 +40,7 @@ export default function Dashboard({ user, onLogout }) {
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedStore, setSelectedStore] = useState(null);
-  const [activeMenu, setActiveMenu] = useState("overview");
+  const [activeMenu, setActiveMenu] = useState(user.role === "admin" ? "tenants" : "overview");
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -69,6 +69,7 @@ export default function Dashboard({ user, onLogout }) {
   ];
 
     const loadData = useCallback(async (showLoading = true) => {
+        if (isAdmin || !user.tenantId) { setLoading(false); return; }
         if (showLoading) setLoading(true);
         try {
             const res = await getStores(user.tenantId);
@@ -78,9 +79,14 @@ export default function Dashboard({ user, onLogout }) {
         } finally {
             if (showLoading) setLoading(false);
         }
-    }, [user.tenantId]);
+    }, [user.tenantId, isAdmin]);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    const handleActionComplete = useCallback(() => {
+        loadData(false);
+        setDataRefreshKey((k) => k + 1);
+    }, [loadData]);
 
     const realSales = (sales) => sales.filter((s) => new Date(s.date).getFullYear() !== 2099);
     const totalRevenue = stores.reduce((sum, s) => sum + realSales(s.sales).reduce((a, b) => a + b.revenue, 0), 0);
@@ -393,7 +399,7 @@ export default function Dashboard({ user, onLogout }) {
                                 </div>
                             ) : (
                                 <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                                    <ChatPanel stores={stores} onActionComplete={() => { loadData(false); setDataRefreshKey((k) => k + 1); }} onCollapse={() => setChatCollapsed(true)} tenantId={tenantId} />
+                                    <ChatPanel stores={stores} onActionComplete={handleActionComplete} onCollapse={() => setChatCollapsed(true)} tenantId={tenantId} />
                                 </div>
                             )}
                         </div>
