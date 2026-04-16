@@ -1,25 +1,35 @@
-import React, { useState, useRef, useEffect, memo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Input, Button, Card, Typography, Tag, Spin, Table } from "antd";
 import { SendOutlined, UserOutlined, ThunderboltOutlined, CheckCircleOutlined, BarChartOutlined, BulbOutlined, FileTextOutlined, RightOutlined } from "@ant-design/icons";
-import { llmAgent, getConfig, getProducts, getInventory } from "../api/request";
+import { llmAgent, llmExecute, getConfig, getProducts, getInventory } from "../api/request";
 import { useI18n } from "../i18n";
 import logo from "../assets/logo.png";
 
 const { Text } = Typography;
 
-export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, tenantId }) {
+export default function ChatPanel({ stores, onActionComplete, onCollapse, tenantId }) {
   const { t, locale } = useI18n();
   const dateLocale = locale === "es" ? "es-MX" : "en-US";
 
-  const [messages, setMessages] = useState([
-    { role: "assistant", content: t("welcomeMessage") },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [modelName, setModelName] = useState("");
   const [products, setProducts] = useState([]);
   const [inventory, setInventory] = useState([]);
   const scrollRef = useRef(null);
+
+  // Update welcome message when locale changes
+  useEffect(() => {
+    setMessages((prev) => {
+      const welcome = { role: "assistant", content: t("welcomeMessage") };
+      // If no user messages yet, replace the whole array with welcome
+      if (prev.length === 0 || prev[0]?.role === "assistant" && !prev[0]?.result) {
+        return [welcome, ...prev.slice(1)];
+      }
+      return prev;
+    });
+  }, [locale]);
 
   useEffect(() => {
     getConfig().then(res => {
@@ -58,11 +68,6 @@ export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, t
         status: s.status,
         totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)),
         totalOrders: s.sales.reduce((a, b) => a + b.orders, 0),
-        last7Days: s.sales.slice(-7).map((d) => ({
-          date: new Date(d.date).toLocaleDateString(dateLocale),
-          revenue: Math.round(d.revenue),
-          orders: d.orders,
-        })),
       }));
 
       const productsData = products.map((p) => ({
@@ -86,7 +91,27 @@ export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, t
 
       const summaryData = { stores: storesData, products: productsData, inventory: inventoryData };
 
-      const res = await llmAgent(summaryData, question, locale, tenantId);
+      // Build conversation history - extract human-readable summaries only
+      const summarizeResult = (r) => {
+        if (!r) return "";
+        switch (r.type) {
+          case "text": return r.content || "";
+          case "action": return `Action: ${r.tool} - ${r.result?.message || "done"}`;
+          case "batch": return `Batch: ${r.count} stores affected with ${r.tool}`;
+          case "confirmation": return r.cancelled ? `Cancelled: ${r.description}` : `Pending: ${r.description}`;
+          case "report": return `Report: ${r.summary}`;
+          case "query": return r.summary || "Data query result";
+          case "suggestions": return `Suggestions: ${(r.items || []).map((i) => i.title).join(", ")}`;
+          default: return "";
+        }
+      };
+
+      const history = messages.slice(1).map((m) => ({
+        role: m.role,
+        content: m.result ? summarizeResult(m.result) : m.content,
+      })).filter((m) => m.content); // Remove empty entries
+
+      const res = await llmAgent(summaryData, question, locale, tenantId, history);
       const result = res.data.result;
 
       setMessages((prev) => [...prev, { role: "assistant", content: "", result }]);
@@ -101,8 +126,69 @@ export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, t
     }
   };
 
-  const renderResult = (result) => {
+  const handleConfirmExecute = async (result, msgIndex) => {
+    const actions = result.actions || [{ tool: result.tool, params: result.params }];
+    try {
+      const storesData = stores.map((s) => ({ id: s.id, name: s.name, city: s.city, status: s.status, totalRevenue: Math.round(s.sales.reduce((a, b) => a + b.revenue, 0)), totalOrders: s.sales.reduce((a, b) => a + b.orders, 0) }));
+      const productsData = products.map((p) => ({ id: p.id, name: p.name, sku: p.sku, price: p.price, cost: p.cost, category: p.category?.name || p.categoryId }));
+      const inventoryData = inventory.map((i) => ({ storeId: i.storeId, storeName: i.store?.name || "", productId: i.productId, productName: i.product?.name || "", quantity: i.quantity, reorderLevel: i.reorderLevel, lowStock: i.quantity <= i.reorderLevel }));
+      const contextData = { stores: storesData, products: productsData, inventory: inventoryData };
+
+      const res = await llmExecute(actions, contextData, tenantId);
+      const execResult = res.data.result;
+      setMessages((prev) => [...prev.slice(0, msgIndex + 1), { role: "assistant", content: "", result: execResult }]);
+      if ((execResult?.type === "action" || execResult?.type === "batch") && onActionComplete) {
+        setTimeout(() => onActionComplete(), 500);
+      }
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "Execution failed. Please try again." }]);
+    }
+  };
+
+  const handleConfirmCancel = (msgIndex) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated[msgIndex] = { ...updated[msgIndex], result: { ...updated[msgIndex].result, cancelled: true } };
+      return updated;
+    });
+  };
+
+  const renderResult = (result, msgIndex) => {
     switch (result.type) {
+      case "confirmation":
+        return (
+          <div style={{ fontSize: 12 }}>
+            <div style={{ marginBottom: 8 }}>
+              <Tag icon={<ThunderboltOutlined />} color="warning" style={{ marginRight: 4 }}>{t("pendingAction")}</Tag>
+              <Text style={{ fontSize: 12, color: "#8c8c8c" }}>{result.tool}</Text>
+            </div>
+            <div style={{ background: "#fffbe6", border: "1px solid #ffe58f", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, color: "#d48806", fontWeight: 600 }}>⚠️ {t("confirmQuestion")}</Text>
+            </div>
+            <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 12px", marginBottom: 8, whiteSpace: "pre-wrap" }}>
+              {result.description}
+            </div>
+            {!result.cancelled ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button size="small" type="primary" icon={<CheckCircleOutlined />}
+                  onClick={() => handleConfirmExecute(result, msgIndex)}
+                  style={{ borderRadius: 6, fontSize: 11 }}>
+                  {t("confirmAction")}
+                </Button>
+                <Button size="small" danger
+                  onClick={() => handleConfirmCancel(msgIndex)}
+                  style={{ borderRadius: 6, fontSize: 11 }}>
+                  {t("cancelAction")}
+                </Button>
+              </div>
+            ) : (
+              <div style={{ background: "#f5f5f5", borderRadius: 8, padding: "6px 12px" }}>
+                <Text style={{ fontSize: 12, color: "#8c8c8c" }}>🚫 {t("cancelAction")}</Text>
+              </div>
+            )}
+          </div>
+        );
+
       case "action":
         return (
           <>
@@ -271,4 +357,4 @@ export default memo(function ChatPanel({ stores, onActionComplete, onCollapse, t
       </div>
     </div>
   );
-});
+}

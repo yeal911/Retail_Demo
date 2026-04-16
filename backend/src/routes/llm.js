@@ -19,13 +19,43 @@ router.post("/llm/query", async (req, res) => {
 
 router.post("/llm/agent", async (req, res) => {
   try {
-    const { data, question, locale, tenantId } = req.body;
+    const { data, question, locale, tenantId, history } = req.body;
     if (!question) return res.status(400).json({ success: false, message: "Question is required" });
-    const result = await llmService.agent(data, question, locale, tenantId);
+    const result = await llmService.agent(data, question, locale, tenantId, history);
     res.json({ success: true, result });
   } catch (error) {
     console.error("LLM agent error:", error);
     res.status(500).json({ success: false, message: "Agent request failed" });
+  }
+});
+
+// ── Execute confirmed action ──
+router.post("/llm/execute", async (req, res) => {
+  try {
+    const { actions, data, tenantId } = req.body;
+    if (!actions || !actions.length) return res.status(400).json({ success: false, message: "Actions required" });
+
+    const { stores: storesData } = llmService._normalizeData(data);
+    const results = [];
+
+    for (const action of actions) {
+      const result = await llmService._executeTool(action.tool, action.params, tenantId, data);
+      const storeName = action.params.storeId ? storesData.find((s) => s.id === action.params.storeId)?.name : "";
+      results.push({ tool: action.tool, params: action.params, result, storeName });
+    }
+
+    // Single action
+    if (results.length === 1) {
+      const r = results[0];
+      res.json({ success: true, result: { type: "action", tool: r.tool, params: r.params, result: r.result } });
+      return;
+    }
+
+    // Batch
+    res.json({ success: true, result: { type: "batch", tool: results[0].tool, count: results.length, results: results.map((r) => ({ storeId: r.params.storeId, storeName: r.storeName, result: r.result })) } });
+  } catch (error) {
+    console.error("LLM execute error:", error);
+    res.status(500).json({ success: false, message: "Action execution failed" });
   }
 });
 

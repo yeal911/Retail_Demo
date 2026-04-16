@@ -44,6 +44,7 @@ export default function Dashboard({ user, onLogout }) {
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const [contentFade, setContentFade] = useState(false);
   const { t, locale, switchLocale } = useI18n();
 
   const isAdmin = user.role === "admin";
@@ -84,8 +85,12 @@ export default function Dashboard({ user, onLogout }) {
     useEffect(() => { loadData(); }, [loadData]);
 
     const handleActionComplete = useCallback(() => {
-        loadData(false);
-        setDataRefreshKey((k) => k + 1);
+        setContentFade(true);
+        setTimeout(() => {
+            loadData(false);
+            setDataRefreshKey((k) => k + 1);
+            setContentFade(false);
+        }, 300);
     }, [loadData]);
 
     const realSales = (sales) => sales.filter((s) => new Date(s.date).getFullYear() !== 2099);
@@ -329,7 +334,7 @@ export default function Dashboard({ user, onLogout }) {
                     </div>
                 ) : (
                     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-                        <div style={{ flex: 1, overflow: "auto", padding: 20, paddingRight: 8 }}>
+                        <div style={{ flex: 1, overflow: "auto", padding: 20, paddingRight: 8, opacity: contentFade ? 0.3 : 1, transition: "opacity 0.3s ease" }}>
                             {activeMenu === "overview" && !isAdmin && (
                                 <>
                                     <AIInsights stores={stores} tenantId={tenantId} />

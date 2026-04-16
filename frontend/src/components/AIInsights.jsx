@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Card, Tag, Spin } from "antd";
+import { Card, Tag, Spin, Tooltip } from "antd";
 import { AlertOutlined, WarningOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { useI18n } from "../i18n";
 import { llmInsights } from "../api/request";
@@ -111,7 +111,13 @@ export default function AIInsights({ stores, tenantId }) {
         }}
       >
         <span style={{ color: sev.color, fontSize: 16, marginTop: 1, flexShrink: 0 }}>{sev.icon}</span>
-        <span style={{ fontSize: 12, lineHeight: 1.6, color: "#374151", flex: 1 }}>{item.description}</span>
+        <Tooltip title={item.description} placement="topLeft" mouseEnterDelay={0.5}>
+          <span style={{
+            fontSize: 12, lineHeight: 1.6, color: "#374151", flex: 1,
+            display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical",
+            overflow: "hidden", textOverflow: "ellipsis",
+          }}>{item.description}</span>
+        </Tooltip>
         <Tag
           color={item.severity === "high" ? "error" : item.severity === "medium" ? "warning" : "processing"}
           style={{ fontSize: 10, lineHeight: "16px", padding: "0 4px", margin: 0, flexShrink: 0 }}

@@ -55,7 +55,7 @@ const translations = {
     thinking: "Thinking...",
     inputPlaceholder: "Ask a question or give a command...",
     executeAction: "Action",
-    welcomeMessage: "Hello! I'm your AI retail assistant. I can analyze data or execute operations.\n\nTry asking:\n• Which store has the highest revenue?\n• What's the sales trend for the last 7 days?\n• Deactivate a store",
+    welcomeMessage: "Hello! I'm your AI retail assistant. I can analyze data and execute operations using these tools:\n\n• Update store status (active/inactive)\n• Set sales targets\n• Send notifications\n• Adjust product pricing\n• Transfer inventory between stores\n• Restock products\n\nTry asking:\n• Which store has the highest revenue?\n• Adjust the price of Mate 60 Pro to $18,999\n• Restock Band 8 at CDMX Store with 50 units",
     actionSuccess: "Action completed",
 
     // Session
@@ -107,6 +107,10 @@ const translations = {
     suggestionsTitle: "Actionable Suggestions",
     suggestionExecute: "Execute",
     suggestionImpact: "Impact",
+    confirmAction: "Confirm",
+    cancelAction: "Cancel",
+    pendingAction: "Pending Operation",
+    confirmQuestion: "Are you sure you want to execute the following operation?",
 
     // Menu categories
     businessManagement: "Business Management",
@@ -224,7 +228,7 @@ const translations = {
     thinking: "Pensando...",
     inputPlaceholder: "Haz una pregunta o da una instrucción...",
     executeAction: "Acción",
-    welcomeMessage: "¡Hola! Soy tu asistente IA de retail. Puedo analizar datos o ejecutar operaciones.\n\nPrueba preguntar:\n• ¿Qué tienda tiene mayores ingresos?\n• ¿Cuál es la tendencia de ventas de los últimos 7 días?\n• Desactivar una tienda",
+    welcomeMessage: "¡Hola! Soy tu asistente IA de retail. Puedo analizar datos y ejecutar operaciones con estas herramientas:\n\n• Actualizar estado de tienda (activo/inactivo)\n• Establecer objetivos de ventas\n• Enviar notificaciones\n• Ajustar precios de productos\n• Transferir inventario entre tiendas\n• Reabastecer productos\n\nPrueba preguntar:\n• ¿Qué tienda tiene mayores ingresos?\n• Ajustar el precio de Mate 60 Pro a $18,999\n• Reabastecer Band 8 en CDMX Store con 50 unidades",
     actionSuccess: "Acción completada",
 
     // Session
@@ -276,6 +280,10 @@ const translations = {
     suggestionsTitle: "Sugerencias Accionables",
     suggestionExecute: "Ejecutar",
     suggestionImpact: "Impacto",
+    confirmAction: "Confirmar",
+    cancelAction: "Cancelar",
+    pendingAction: "Operación Pendiente",
+    confirmQuestion: "¿Está seguro de que desea ejecutar la siguiente operación?",
 
     // Menu categories
     businessManagement: "Gestión de Negocio",
@@ -345,7 +353,7 @@ const I18nContext = createContext();
 
 export function I18nProvider({ children }) {
   const [locale, setLocale] = useState(() => {
-    return localStorage.getItem("locale") || "es";
+    return localStorage.getItem("locale") || "en";
   });
 
   const switchLocale = useCallback((newLocale) => {

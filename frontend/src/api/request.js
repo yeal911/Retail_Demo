@@ -23,8 +23,11 @@ export const setStoreTarget = (id, target) =>
 export const llmQuery = (data, question, tenantId) =>
   api.post("/api/llm/query", { data, question, tenantId });
 
-export const llmAgent = (data, question, locale, tenantId) =>
-  api.post("/api/llm/agent", { data, question, locale, tenantId });
+export const llmAgent = (data, question, locale, tenantId, history) =>
+  api.post("/api/llm/agent", { data, question, locale, tenantId, history });
+
+export const llmExecute = (actions, data, tenantId) =>
+  api.post("/api/llm/execute", { actions, data, tenantId });
 
 export const llmInsights = (data, locale, tenantId) =>
   api.post("/api/llm/insights", { data, locale, tenantId });

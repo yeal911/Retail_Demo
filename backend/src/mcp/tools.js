@@ -21,8 +21,10 @@ async function logMcp(tool, params, result, storeId, tenantId) {
 export async function updateStoreStatus(storeId, status, tenantId) {
   const params = { storeId, status };
   try {
-    const store = await prisma.store.update({ where: { id: storeId }, data: { status } });
-    const result = { success: true, message: `Store "${store.name}" status updated to ${status}` };
+    const result = await prisma.$transaction(async (tx) => {
+      const store = await tx.store.update({ where: { id: storeId }, data: { status } });
+      return { success: true, message: `Store "${store.name}" status updated to ${status}` };
+    });
     await logMcp("updateStoreStatus", params, result, storeId, tenantId);
     return result;
   } catch (error) {
@@ -36,21 +38,19 @@ export async function updateStoreStatus(storeId, status, tenantId) {
 export async function setSalesTarget(storeId, target, tenantId) {
   const params = { storeId, target };
   try {
-    const store = await prisma.store.findUnique({ where: { id: storeId } });
-    if (!store) {
-      const result = { success: false, message: `Store ${storeId} not found` };
-      await logMcp("setSalesTarget", params, result, storeId, tenantId);
-      return result;
-    }
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    await prisma.salesTarget.upsert({
-      where: { storeId_year_month: { storeId, year, month } },
-      update: { target: Number(target) },
-      create: { storeId, year, month, target: Number(target) },
+    const result = await prisma.$transaction(async (tx) => {
+      const store = await tx.store.findUnique({ where: { id: storeId } });
+      if (!store) return { success: false, message: `Store ${storeId} not found` };
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      await tx.salesTarget.upsert({
+        where: { storeId_year_month: { storeId, year, month } },
+        update: { target: Number(target) },
+        create: { storeId, year, month, target: Number(target) },
+      });
+      return { success: true, message: `Store "${store.name}" ${year}年${month}月销售目标 set to $${Number(target).toLocaleString()}` };
     });
-    const result = { success: true, message: `Store "${store.name}" ${year}年${month}月销售目标 set to $${Number(target).toLocaleString()}` };
     await logMcp("setSalesTarget", params, result, storeId, tenantId);
     return result;
   } catch (error) {
@@ -85,8 +85,10 @@ export async function sendNotification(storeId, message, tenantId) {
 export async function adjustPricing(productId, newPrice, tenantId) {
   const params = { productId, newPrice };
   try {
-    const product = await prisma.product.update({ where: { id: productId }, data: { price: Number(newPrice) } });
-    const result = { success: true, message: `"${product.name}" price updated to $${Number(newPrice).toLocaleString()}` };
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({ where: { id: productId }, data: { price: Number(newPrice) } });
+      return { success: true, message: `"${product.name}" price updated to $${Number(newPrice).toLocaleString()}` };
+    });
     await logMcp("adjustPricing", params, result, null, tenantId);
     return result;
   } catch (error) {
@@ -100,19 +102,19 @@ export async function adjustPricing(productId, newPrice, tenantId) {
 export async function transferInventory(productId, fromStoreId, toStoreId, quantity, tenantId) {
   const params = { productId, fromStoreId, toStoreId, quantity };
   try {
-    const from = await prisma.inventory.findUnique({ where: { storeId_productId: { storeId: fromStoreId, productId } } });
-    if (!from || from.quantity < quantity) {
-      const result = { success: false, message: `Insufficient stock: ${from?.quantity || 0} available, ${quantity} requested` };
-      await logMcp("transferInventory", params, result, fromStoreId, tenantId);
-      return result;
-    }
-    await prisma.inventory.update({ where: { id: from.id }, data: { quantity: { decrement: quantity } } });
-    await prisma.inventory.upsert({
-      where: { storeId_productId: { storeId: toStoreId, productId } },
-      update: { quantity: { increment: quantity } },
-      create: { storeId: toStoreId, productId, quantity, reorderLevel: 20 },
+    const result = await prisma.$transaction(async (tx) => {
+      const from = await tx.inventory.findUnique({ where: { storeId_productId: { storeId: fromStoreId, productId } } });
+      if (!from || from.quantity < quantity) {
+        return { success: false, message: `Insufficient stock: ${from?.quantity || 0} available, ${quantity} requested` };
+      }
+      await tx.inventory.update({ where: { id: from.id }, data: { quantity: { decrement: quantity } } });
+      await tx.inventory.upsert({
+        where: { storeId_productId: { storeId: toStoreId, productId } },
+        update: { quantity: { increment: quantity } },
+        create: { storeId: toStoreId, productId, quantity, reorderLevel: 20 },
+      });
+      return { success: true, message: `Transferred ${quantity} units from store ${fromStoreId} to ${toStoreId}` };
     });
-    const result = { success: true, message: `Transferred ${quantity} units from store ${fromStoreId} to ${toStoreId}` };
     await logMcp("transferInventory", params, result, fromStoreId, tenantId);
     return result;
   } catch (error) {
@@ -126,11 +128,13 @@ export async function transferInventory(productId, fromStoreId, toStoreId, quant
 export async function restockProduct(productId, storeId, quantity, tenantId) {
   const params = { productId, storeId, quantity };
   try {
-    const inv = await prisma.inventory.update({
-      where: { storeId_productId: { storeId, productId } },
-      data: { quantity: { increment: quantity }, lastRestocked: new Date() },
+    const result = await prisma.$transaction(async (tx) => {
+      const inv = await tx.inventory.update({
+        where: { storeId_productId: { storeId, productId } },
+        data: { quantity: { increment: quantity }, lastRestocked: new Date() },
+      });
+      return { success: true, message: `Restocked ${quantity} units, new total: ${inv.quantity}` };
     });
-    const result = { success: true, message: `Restocked ${quantity} units, new total: ${inv.quantity}` };
     await logMcp("restockProduct", params, result, storeId, tenantId);
     return result;
   } catch (error) {
