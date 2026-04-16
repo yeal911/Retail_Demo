@@ -70,7 +70,7 @@ project-root/
 ├── backend/           # Backend Node.js
 │   ├── src/routes/    # auth, store, llm
 │   ├── src/services/  # llmService (prompts i18n, 5 funciones IA)
-│   ├── src/mcp/       # tools.js (6 herramientas MCP + McpLog)
+│   ├── src/mcp/       # tools.js (5 herramientas MCP + McpLog)
 │   └── prisma/        # schema.prisma (11 modelos), seed.js
 │
 ├── README.md          # Versión en Inglés
@@ -116,18 +116,17 @@ project-root/
 | GET | /api/tenants | Listar tenants (admin) |
 | GET/PUT | /api/config | Configuración LLM |
 
-## Herramientas MCP (6)
+## Herramientas MCP (5)
 
 | Herramienta | Parámetros | Descripción | Auto-Refresh UI |
 |------------|-----------|-------------|-----------------|
 | updateStoreStatus | storeId, status | Actualizar estado de tienda | StoreTable ✅ |
 | setSalesTarget | storeId, target | Establecer objetivo de ventas | StoreTable ✅ |
-| sendNotification | storeId, message | Enviar notificación | Campana 🔔 ✅ |
 | adjustPricing | productId, newPrice | Ajustar precio de producto | ProductManagement ✅ |
 | transferInventory | productId, from, to, qty | Transferir stock entre tiendas | InventoryManagement ✅ |
 | restockProduct | productId, storeId, qty | Reabastecer producto | InventoryManagement ✅ |
 
-**Contexto LLM**: Las 6 herramientas son completamente funcionales porque el prompt del Agente incluye datos de Store + Product + Inventory, permitiendo al LLM referenciar IDs correctamente.
+**Contexto LLM**: Las 5 herramientas son completamente funcionales porque el prompt del Agente incluye datos de Store + Product + Inventory, permitiendo al LLM referenciar IDs correctamente.
 
 ## Capacidades IA (5 Funciones)
 
@@ -160,5 +159,4 @@ project-root/
 - **Registros LLM**: Todas las llamadas IA registradas con entrada, salida, modelo, duración
 - **Registros MCP**: Todas las operaciones registradas con herramienta, parámetros, resultado
 - **Moneda**: Formato MXN ($) para el mercado mexicano
-- **Notificaciones**: Icono de campana con contador para resultados de sendNotification
 - **Objetivo de Ventas**: Visible en tabla de tiendas, almacenado como registro Sale (fecha=2099)

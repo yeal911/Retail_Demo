@@ -314,9 +314,9 @@ Look for: significant revenue drops, unusual order volatility, stores underperfo
 Return ONLY the JSON array, no other text:
 [{"description":"...","severity":"high","storeId":"..."},...]`,
 
-    agent: (data, question) => {
+    agent: (data) => {
       const compact = compactData(data);
-      return `You are an intelligent retail operations Agent. You have access to tools that can query data, modify store status, set sales targets, send notifications, adjust product pricing, transfer inventory, and restock products.
+      return `You are an intelligent retail operations Agent. You have access to tools that can query data, modify store status, set sales targets, adjust product pricing, transfer inventory, and restock products.
 
 ## Current Store Data (summary)
 ${JSON.stringify(compact.stores)}
@@ -324,9 +324,12 @@ ${JSON.stringify(compact.stores)}
 ## Product Catalog
 ${compact.products.length > 0 ? JSON.stringify(compact.products) : "(No product data available)"}
 
-Note: Inventory and detailed sales data are NOT included above. Use the getInventoryStatus and getStoreSales tools to fetch this data when needed.
+Note: The Store Data above already includes totalRevenue and totalOrders (30-day aggregates). Use these directly for ranking, comparison, or "top/bottom" questions — do NOT call getStoreSales for aggregate queries.
+- getStoreSales: only use when you need daily breakdowns or trends (e.g., "show daily revenue trend for the last week")
+- getInventoryStatus: use when you need stock levels, low-stock items, or to verify availability before transfer/restock
 
 ## Instructions
+- Prefer using data already in the prompt over making tool calls. Only call tools when the existing data is genuinely insufficient.
 - Use the provided tools to execute operations when the user requests them
 - For batch operations (e.g., "close all low stores"), call the tool multiple times for each matching store
 - For queries and analysis that don't require tool execution, respond with structured JSON
@@ -353,10 +356,7 @@ IMPORTANT: Choose the response type based on the question complexity:
 {"type":"report","summary":"overall summary","bestStores":[{"name":"...","reason":"..."}],"riskStores":[{"name":"...","reason":"..."}],"recommendations":["..."]}
 
 ### Actionable Suggestions (for optimization recommendations)
-{"type":"suggestions","items":[{"title":"...","reason":"...","tool":"toolName","params":{...},"impact":"expected impact"}]}
-
-## User Input
-${question}`;
+{"type":"suggestions","items":[{"title":"...","reason":"...","tool":"toolName","params":{...},"impact":"expected impact"}]}`;
     },
   },
   es: {
@@ -376,9 +376,9 @@ Buscar: caídas significativas de ingresos, volatilidad inusual de pedidos, tien
 Retorna SOLO el arreglo JSON, sin otro texto:
 [{"description":"...","severity":"high","storeId":"..."},...]`,
 
-    agent: (data, question) => {
+    agent: (data) => {
       const compact = compactData(data);
-      return `Eres un Agente inteligente de operaciones retail. Tienes acceso a herramientas que pueden consultar datos, modificar estado de tiendas, establecer objetivos de ventas, enviar notificaciones, ajustar precios, transferir inventario y reabastecer productos.
+      return `Eres un Agente inteligente de operaciones retail. Tienes acceso a herramientas que pueden consultar datos, modificar estado de tiendas, establecer objetivos de ventas, ajustar precios, transferir inventario y reabastecer productos.
 
 ## Datos Actuales de Tiendas (resumen)
 ${JSON.stringify(compact.stores)}
@@ -386,9 +386,12 @@ ${JSON.stringify(compact.stores)}
 ## Catálogo de Productos
 ${compact.products.length > 0 ? JSON.stringify(compact.products) : "(Datos de productos no disponibles)"}
 
-Nota: Los datos de inventario y ventas detalladas NO están incluidos arriba. Usa las herramientas getInventoryStatus y getStoreSales para obtener estos datos cuando sea necesario.
+Nota: Los Datos de Tiendas arriba ya incluyen totalRevenue y totalOrders (agregados de 30 días). Úsalos directamente para preguntas de ranking, comparación o "mejor/peor" — NO llames getStoreSales para consultas agregadas.
+- getStoreSales: solo úsalo cuando necesites desglose diario o tendencias (ej., "muestra la tendencia de ingresos diarios de la última semana")
+- getInventoryStatus: úsalo cuando necesites niveles de stock, items con stock bajo, o verificar disponibilidad antes de transferir/reabastecer
 
 ## Instrucciones
+- Prefiere usar los datos ya disponibles en el prompt sobre hacer llamadas a herramientas. Solo llama herramientas cuando los datos existentes sean genuinamente insuficientes.
 - Usa las herramientas proporcionadas para ejecutar operaciones cuando el usuario las solicite
 - Para operaciones por lote (ej. "cerrar tiendas de bajo rendimiento"), llama la herramienta múltiples veces para cada tienda que coincida
 - Para consultas y análisis que no requieren ejecución de herramientas, responde con JSON estructurado
@@ -415,10 +418,7 @@ IMPORTANTE: Elige el tipo de respuesta según la complejidad de la pregunta:
 {"type":"report","summary":"resumen general","bestStores":[{"name":"...","reason":"..."}],"riskStores":[{"name":"...","reason":"..."}],"recommendations":["..."]}
 
 ### Sugerencias Accionables (para recomendaciones de optimización)
-{"type":"suggestions","items":[{"title":"...","reason":"...","tool":"nombreHerramienta","params":{...},"impact":"impacto esperado"}]}
-
-## Entrada del Usuario
-${question}`;
+{"type":"suggestions","items":[{"title":"...","reason":"...","tool":"nombreHerramienta","params":{...},"impact":"impacto esperado"}]}`;
     },
   },
 };
@@ -440,10 +440,6 @@ function describeTool(toolName, params, data, locale = "en") {
       return isEn
         ? `Set sales target for store "${storeName(params.storeId)}" to $${Number(params.target).toLocaleString()}`
         : `Establecer objetivo de ventas para "${storeName(params.storeId)}" en $${Number(params.target).toLocaleString()}`;
-    case "sendNotification":
-      return isEn
-        ? `Send notification to store "${storeName(params.storeId)}": "${params.message}"`
-        : `Enviar notificación a "${storeName(params.storeId)}": "${params.message}"`;
     case "adjustPricing":
       return isEn
         ? `Adjust price of "${productName(params.productId)}" to $${Number(params.newPrice).toLocaleString()}`
@@ -482,17 +478,21 @@ export async function generateInsights(data, locale = "en", tenantId) {
 export async function agent(data, question, locale = "en", tenantId, history = []) {
   const lang = locale === "es" ? "es" : "en";
   const { stores: storesData } = normalizeData(data);
-  const systemPrompt = prompts[lang].agent(data, question);
+  const systemPrompt = prompts[lang].agent(data);
 
-  // Build messages array: system context + conversation history + current question
-  const messages = [{ role: "user", content: systemPrompt }];
+  // Build messages array: system context → conversation history → current question (last)
+  // This ensures correct chronological order so the LLM can resolve pronouns like "it"
+  const messages = [{ role: "system", content: systemPrompt }];
 
-  // Add conversation history (previous turns)
+  // Add conversation history (previous turns) in chronological order
   for (const msg of history) {
     if (msg.role === "user" || msg.role === "assistant") {
       messages.push({ role: msg.role, content: msg.content });
     }
   }
+
+  // Add current question as the last user message
+  messages.push({ role: "user", content: question });
   const executedActions = [];  // Track all executed tool calls
   const MAX_TURNS = 5;        // Prevent infinite loops
 
@@ -644,7 +644,7 @@ export async function agent(data, question, locale = "en", tenantId, history = [
 
 export async function analyze(data, question, locale = "en", tenantId) {
   const lang = locale === "es" ? "es" : "en";
-  const prompt = prompts[lang].agent(data, question);
-  const { content } = await callLLM({ messages: [{ role: "user", content: prompt }], type: "query", tenantId });
+  const systemPrompt = prompts[lang].agent(data);
+  const { content } = await callLLM({ messages: [{ role: "system", content: systemPrompt }, { role: "user", content: question }], type: "query", tenantId });
   return content;
 }

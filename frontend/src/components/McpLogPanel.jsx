@@ -5,7 +5,7 @@ import { useI18n } from "../i18n";
 import { getMcpLogs, deleteMcpLog } from "../api/request";
 
 const cardStyle = { borderRadius: 12, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)" };
-const toolColors = { updateStoreStatus: "orange", setSalesTarget: "blue", sendNotification: "green" };
+const toolColors = { updateStoreStatus: "orange", setSalesTarget: "blue" };
 
 export default function McpLogPanel({ tenantId }) {
   const { t, locale } = useI18n();

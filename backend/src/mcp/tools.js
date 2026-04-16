@@ -49,7 +49,7 @@ export async function setSalesTarget(storeId, target, tenantId) {
         update: { target: Number(target) },
         create: { storeId, year, month, target: Number(target) },
       });
-      return { success: true, message: `Store "${store.name}" ${year}年${month}月销售目标 set to $${Number(target).toLocaleString()}` };
+      return { success: true, message: `Store "${store.name}" ${year}-${String(month).padStart(2, "0")} sales target set to $${Number(target).toLocaleString()}` };
     });
     await logMcp("setSalesTarget", params, result, storeId, tenantId);
     return result;
@@ -57,27 +57,6 @@ export async function setSalesTarget(storeId, target, tenantId) {
     console.error("setSalesTarget error:", error);
     const result = { success: false, message: `Failed to set sales target: ${error.message}` };
     await logMcp("setSalesTarget", params, result, storeId, tenantId);
-    return result;
-  }
-}
-
-export async function sendNotification(storeId, message, tenantId) {
-  const params = { storeId, message };
-  try {
-    const store = await prisma.store.findUnique({ where: { id: storeId } });
-    if (!store) {
-      const result = { success: false, message: `Store ${storeId} not found` };
-      await logMcp("sendNotification", params, result, storeId, tenantId);
-      return result;
-    }
-    console.log(`📢 Notification → Store "${store.name}" (${storeId}): ${message}`);
-    const result = { success: true, message: `Notification sent to store "${store.name}": ${message}` };
-    await logMcp("sendNotification", params, result, storeId, tenantId);
-    return result;
-  } catch (error) {
-    console.error("sendNotification error:", error);
-    const result = { success: false, message: `Failed to send notification: ${error.message}` };
-    await logMcp("sendNotification", params, result, storeId, tenantId);
     return result;
   }
 }

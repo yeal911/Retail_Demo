@@ -55,7 +55,7 @@ const translations = {
     thinking: "Thinking...",
     inputPlaceholder: "Ask a question or give a command...",
     executeAction: "Action",
-    welcomeMessage: "Hello! I'm your AI retail assistant. I can analyze data and execute operations using these tools:\n\n• Update store status (active/inactive)\n• Set sales targets\n• Send notifications\n• Adjust product pricing\n• Transfer inventory between stores\n• Restock products\n\nTry asking:\n• Which store has the highest revenue?\n• Adjust the price of Mate 60 Pro to $18,999\n• Restock Band 8 at CDMX Store with 50 units",
+    welcomeMessage: "Hello! I'm your AI retail assistant. I can analyze data and execute operations using these tools:\n\n• Update store status (active/inactive)\n• Set sales targets\n• Adjust product pricing\n• Transfer inventory between stores\n• Restock products\n\nTry asking:\n• Which store has the highest revenue?\n• Adjust the price of Mate 60 Pro to $18,999\n• Restock Band 8 at CDMX Store with 50 units",
     actionSuccess: "Action completed",
 
     // Session
@@ -90,10 +90,6 @@ const translations = {
     statusUpdateFailed: "Failed to update status",
     targetUpdated: "Target updated",
     targetUpdateFailed: "Failed to update target",
-
-    // Notifications
-    notifications: "Notifications",
-    noNotifications: "No notifications",
 
     // Agent result types
     reportTitle: "Operations Report",
@@ -228,7 +224,7 @@ const translations = {
     thinking: "Pensando...",
     inputPlaceholder: "Haz una pregunta o da una instrucción...",
     executeAction: "Acción",
-    welcomeMessage: "¡Hola! Soy tu asistente IA de retail. Puedo analizar datos y ejecutar operaciones con estas herramientas:\n\n• Actualizar estado de tienda (activo/inactivo)\n• Establecer objetivos de ventas\n• Enviar notificaciones\n• Ajustar precios de productos\n• Transferir inventario entre tiendas\n• Reabastecer productos\n\nPrueba preguntar:\n• ¿Qué tienda tiene mayores ingresos?\n• Ajustar el precio de Mate 60 Pro a $18,999\n• Reabastecer Band 8 en CDMX Store con 50 unidades",
+    welcomeMessage: "¡Hola! Soy tu asistente IA de retail. Puedo analizar datos y ejecutar operaciones con estas herramientas:\n\n• Actualizar estado de tienda (activo/inactivo)\n• Establecer objetivos de ventas\n• Ajustar precios de productos\n• Transferir inventario entre tiendas\n• Reabastecer productos\n\nPrueba preguntar:\n• ¿Qué tienda tiene mayores ingresos?\n• Ajustar el precio de Mate 60 Pro a $18,999\n• Reabastecer Band 8 en CDMX Store con 50 unidades",
     actionSuccess: "Acción completada",
 
     // Session
@@ -263,10 +259,6 @@ const translations = {
     statusUpdateFailed: "Error al actualizar estado",
     targetUpdated: "Objetivo actualizado",
     targetUpdateFailed: "Error al actualizar objetivo",
-
-    // Notifications
-    notifications: "Notificaciones",
-    noNotifications: "Sin notificaciones",
 
     // Agent result types
     reportTitle: "Reporte de Operaciones",

@@ -70,7 +70,7 @@ project-root/
 ├── backend/           # Node.js backend
 │   ├── src/routes/    # auth, store, llm
 │   ├── src/services/  # llmService (i18n prompts, 5 AI features)
-│   ├── src/mcp/       # tools.js (6 MCP tools, DB-backed + McpLog)
+│   ├── src/mcp/       # tools.js (5 MCP tools, DB-backed + McpLog)
 │   └── prisma/        # schema.prisma (11 models), seed.js
 │
 ├── README.md          # This file (EN)
@@ -116,18 +116,17 @@ project-root/
 | GET | /api/tenants | List tenants (admin) |
 | GET/PUT | /api/config | LLM configuration |
 
-## MCP Tools (6)
+## MCP Tools (5)
 
 | Tool | Parameters | Description | UI Auto-Refresh |
 |------|-----------|-------------|-----------------|
 | updateStoreStatus | storeId, status | Update store status | StoreTable ✅ |
 | setSalesTarget | storeId, target | Set sales target | StoreTable ✅ |
-| sendNotification | storeId, message | Send notification | Bell 🔔 ✅ |
 | adjustPricing | productId, newPrice | Adjust product price | ProductManagement ✅ |
 | transferInventory | productId, from, to, qty | Transfer stock between stores | InventoryManagement ✅ |
 | restockProduct | productId, storeId, qty | Restock product | InventoryManagement ✅ |
 
-**LLM Context**: All 6 tools are fully functional because the Agent prompt includes Store + Product + Inventory data, enabling the LLM to correctly reference IDs.
+**LLM Context**: All 5 tools are fully functional because the Agent prompt includes Store + Product + Inventory data, enabling the LLM to correctly reference IDs.
 
 ## AI Capabilities (5 Features)
 
@@ -171,5 +170,4 @@ project-root/
 - **LLM Logs**: All AI calls recorded with input, output, model, duration
 - **MCP Logs**: All store operations recorded with tool, params, result
 - **Currency**: MXN ($) format for Mexican market
-- **Notifications**: Bell icon with badge count for sendNotification results
 - **Sales Target**: Visible in storeTable, stored as Sale record (date=2099)
