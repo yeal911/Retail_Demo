@@ -223,7 +223,9 @@ async function executeTool(toolName, params, tenantId, data, locale = "en") {
       const err3 = validateId(params.toStoreId, stores, "toStoreId");
       if (err3) return { success: false, message: err3 };
       const { transferInventory } = await import("../mcp/tools.js");
-      return await transferInventory(params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId, locale);
+      const fromName = stores.find((s) => s.id === params.fromStoreId)?.name;
+      const toName = stores.find((s) => s.id === params.toStoreId)?.name;
+      return await transferInventory(params.productId, params.fromStoreId, params.toStoreId, params.quantity, tenantId, locale, fromName, toName);
     }
     case "restockProduct": {
       const err1 = validateId(params.productId, products, "productId");

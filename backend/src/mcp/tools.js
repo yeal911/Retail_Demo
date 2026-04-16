@@ -119,7 +119,7 @@ export async function adjustPricing(productId, newPrice, tenantId, locale = "en"
   }
 }
 
-export async function transferInventory(productId, fromStoreId, toStoreId, quantity, tenantId, locale = "en") {
+export async function transferInventory(productId, fromStoreId, toStoreId, quantity, tenantId, locale = "en", fromStoreName, toStoreName) {
   const params = { productId, fromStoreId, toStoreId, quantity };
   const lang = t(locale);
   try {
@@ -134,7 +134,7 @@ export async function transferInventory(productId, fromStoreId, toStoreId, quant
         update: { quantity: { increment: quantity } },
         create: { storeId: toStoreId, productId, quantity, reorderLevel: 20 },
       });
-      return { success: true, message: msgs.transferInventory[lang](quantity, fromStoreId, toStoreId) };
+      return { success: true, message: msgs.transferInventory[lang](quantity, fromStoreName || fromStoreId, toStoreName || toStoreId) };
     });
     await logMcp("transferInventory", params, result, fromStoreId, tenantId);
     return result;
