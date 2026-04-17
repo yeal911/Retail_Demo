@@ -21,10 +21,10 @@ if %errorlevel% neq 0 (
 for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
 echo  [OK] Node.js %NODE_VER% detected
 
-:: Check if this is first run (no node_modules)
+:: Step 1: Install dependencies
 if not exist "backend\node_modules" (
     echo.
-    echo  [1/4] Installing backend dependencies...
+    echo  [1/5] Installing backend dependencies...
     cd backend && npm install && cd ..
     if %errorlevel% neq 0 (
         echo  [ERROR] Backend npm install failed!
@@ -32,12 +32,12 @@ if not exist "backend\node_modules" (
         exit /b 1
     )
 ) else (
-    echo  [1/4] Backend dependencies OK
+    echo  [1/5] Backend dependencies OK
 )
 
 if not exist "frontend\node_modules" (
     echo.
-    echo  [2/4] Installing frontend dependencies...
+    echo  [2/5] Installing frontend dependencies...
     cd frontend && npm install && cd ..
     if %errorlevel% neq 0 (
         echo  [ERROR] Frontend npm install failed!
@@ -45,23 +45,33 @@ if not exist "frontend\node_modules" (
         exit /b 1
     )
 ) else (
-    echo  [2/4] Frontend dependencies OK
+    echo  [2/5] Frontend dependencies OK
 )
 
-:: Check if .env exists, create from template if not
+:: Step 3: Generate Prisma client (always run to ensure it's up to date)
+echo.
+echo  [3/5] Generating Prisma client...
+cd backend && call npx prisma generate && cd ..
+if %errorlevel% neq 0 (
+    echo  [ERROR] Prisma generate failed!
+    pause
+    exit /b 1
+)
+
+:: Step 4: Create .env from template if not exists
 if not exist "backend\.env" (
     echo.
-    echo  [3/4] Creating .env from template...
+    echo  [4/5] Creating .env from template...
     copy "backend\.env.example" "backend\.env" >nul
     echo  Created backend\.env — Please edit it to set your LLM API key before using AI features.
 ) else (
-    echo  [3/4] .env OK
+    echo  [4/5] .env OK
 )
 
-:: Check if database exists, if not run migration + seed
+:: Step 5: Initialize database if not exists
 if not exist "backend\prisma\dev.db" (
     echo.
-    echo  [4/4] Initializing database with test data...
+    echo  [5/5] Initializing database with test data...
     cd backend
     call npx prisma migrate deploy
     if %errorlevel% neq 0 (
@@ -80,7 +90,7 @@ if not exist "backend\prisma\dev.db" (
     cd ..
     echo  Database ready with test data!
 ) else (
-    echo  [4/4] Database OK
+    echo  [5/5] Database OK
 )
 
 echo.
