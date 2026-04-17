@@ -1,6 +1,7 @@
-# env
+# env (keep .env.example)
 .env
 .env.*
+!.env.example
 
 # node
 node_modules/
@@ -14,4 +15,3 @@ dist/
 # other
 .codeartsdoer/
 *.db
-/backend/prisma/migrations/
