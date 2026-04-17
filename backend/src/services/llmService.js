@@ -1,11 +1,36 @@
 import { PrismaClient } from "@prisma/client";
+import undici from "undici";
 
 const prisma = new PrismaClient();
 const LLM_API_URL = process.env.LLM_API_URL;
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const MODEL_NAME = process.env.MODEL_NAME || "deepseek-chat";
 
-// ─── LLM API Call (supports Function Calling) ────────────────────
+// ─── Proxy Dispatcher (undici ProxyAgent, rebuilt when config changes) ──
+let proxyDispatcher = null;
+let proxyFetch = null; // undici's own fetch when proxy is active
+
+export function rebuildProxyAgent() {
+  const enabled = process.env.LLM_PROXY_ENABLED === "true";
+  const url = process.env.LLM_PROXY_URL;
+  if (enabled && url) {
+    proxyDispatcher = new undici.ProxyAgent(url, {
+      connect: {
+        timeout: 30_000,
+        rejectUnauthorized: false, // allow self-signed certs (corporate proxies)
+      },
+    });
+    proxyFetch = undici.fetch; // use undici's fetch (same version as ProxyAgent)
+    console.log(`🔗 LLM proxy enabled: ${url}`);
+  } else {
+    proxyDispatcher = null;
+    proxyFetch = null;
+    console.log("🔗 LLM proxy disabled");
+  }
+}
+rebuildProxyAgent(); // init on startup
+
+// ─── LLM API Call (supports Function Calling + Proxy) ─────────────
 
 async function callLLM({ messages, tools, type, tenantId }) {
   if (!LLM_API_URL || !LLM_API_KEY || LLM_API_KEY === "your_key") {
@@ -19,22 +44,43 @@ async function callLLM({ messages, tools, type, tenantId }) {
 
   const startTime = Date.now();
   try {
-    const response = await fetch(LLM_API_URL, {
+    const fetchFn = proxyFetch || fetch;
+    const fetchOpts = {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${LLM_API_KEY}` },
       body: JSON.stringify(body),
-    });
+    };
+    if (proxyDispatcher) fetchOpts.dispatcher = proxyDispatcher;
+
+    const response = await fetchFn(LLM_API_URL, fetchOpts);
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("LLM API error:", response.status, errText);
-      const errMsg = `LLM request failed (${response.status}). Check API config.`;
+      const preview = errText.length > 500 ? errText.substring(0, 500) + "..." : errText;
+      console.error("LLM API error:", response.status, preview);
+      const errMsg = response.status === 407
+        ? "Proxy authentication required. Check proxy credentials."
+        : `LLM request failed (${response.status}). Check API config.`;
       const duration = Date.now() - startTime;
       await prisma.llmLog.create({ data: { type, input: JSON.stringify(messages), output: errMsg, model: MODEL_NAME, duration, tenantId: tenantId || null } });
       return { content: errMsg, toolCalls: [] };
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonErr) {
+      // Proxy returned non-JSON (e.g., HTML auth page, error page)
+      const text = await response.text().catch(() => "");
+      const preview = text.substring(0, 300);
+      console.error("LLM response not JSON (proxy may be intercepting):", preview);
+      const errMsg = proxyDispatcher
+        ? `Proxy returned non-JSON response. The proxy may require authentication or the API URL is blocked. Response preview: ${preview}`
+        : `LLM response was not valid JSON. Response preview: ${preview}`;
+      const duration = Date.now() - startTime;
+      await prisma.llmLog.create({ data: { type, input: JSON.stringify(messages), output: errMsg, model: MODEL_NAME, duration, tenantId: tenantId || null } });
+      return { content: errMsg, toolCalls: [] };
+    }
     const choice = data.choices?.[0]?.message;
     const content = choice?.content || "";
     const toolCalls = choice?.tool_calls || [];
@@ -49,7 +95,15 @@ async function callLLM({ messages, tools, type, tenantId }) {
     return { content, toolCalls };
   } catch (error) {
     console.error("LLM call error:", error);
-    const errMsg = "LLM call failed. Check network and API config.";
+    const cause = error.cause;
+    let errMsg = "LLM call failed. Check network and API config.";
+    if (cause?.code === "UND_ERR_CONNECT_TIMEOUT" && proxyDispatcher) {
+      errMsg = `LLM proxy connection timed out (${process.env.LLM_PROXY_URL}). Check proxy availability.`;
+    } else if (cause?.code === "EACCES" || cause?.code === "ECONNREFUSED") {
+      errMsg = proxyDispatcher
+        ? `Cannot connect to proxy (${process.env.LLM_PROXY_URL}). Check proxy URL and network.`
+        : "LLM connection refused. Check API URL and network.";
+    }
     const duration = Date.now() - startTime;
     await prisma.llmLog.create({ data: { type, input: JSON.stringify(messages), output: errMsg, model: MODEL_NAME, duration, tenantId: tenantId || null } });
     return { content: errMsg, toolCalls: [] };
@@ -64,7 +118,7 @@ function extractJSON(text) {
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim();
   try { return JSON.parse(jsonStr); } catch {}
-  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+  const jsonMatch = jsonStr.match(/\{[\s\S]*}/);
   if (jsonMatch) try { return JSON.parse(jsonMatch[0]); } catch {}
   return null;
 }
@@ -502,7 +556,6 @@ export async function agent(data, question, locale = "en", tenantId, history = [
 
   // Add current question as the last user message
   messages.push({ role: "user", content: question });
-  const executedActions = [];  // Track all executed tool calls
   const pendingActions = [];  // Accumulate mutation actions across turns (confirm all at once)
   const MAX_TURNS = 10;       // Allow enough turns for batch operations
 
@@ -529,17 +582,6 @@ export async function agent(data, question, locale = "en", tenantId, history = [
           description: pendingActions.map((a) => a.description).join("\n"),
           actions: pendingActions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
         };
-      }
-
-      // If we executed actions, return the last action result
-      if (executedActions.length > 0) {
-        const lastAction = executedActions[executedActions.length - 1];
-        // Single action
-        if (executedActions.length === 1) {
-          return { type: "action", tool: lastAction.tool, params: lastAction.params, result: lastAction.result };
-        }
-        // Multiple actions → batch result
-        return { type: "batch", tool: lastAction.tool, count: executedActions.length, results: executedActions.map((a) => ({ storeId: a.params.storeId, storeName: a.storeName || "", result: a.result })) };
       }
 
       // No actions executed → parse text response as structured JSON
@@ -632,7 +674,6 @@ export async function agent(data, question, locale = "en", tenantId, history = [
 
     // Continue loop — LLM may make more tool calls (e.g., batch operations calling one at a time)
     // Confirmation will be returned when LLM stops calling tools (toolCalls.length === 0)
-    continue;
   }
 
   // Max turns reached → return confirmation if we have pending actions, otherwise error
@@ -647,14 +688,6 @@ export async function agent(data, question, locale = "en", tenantId, history = [
       description: pendingActions.map((a) => a.description).join("\n"),
       actions: pendingActions.map((a) => ({ tool: a.tool, params: a.params, description: a.description })),
     };
-  }
-
-  if (executedActions.length > 0) {
-    const lastAction = executedActions[executedActions.length - 1];
-    if (executedActions.length === 1) {
-      return { type: "action", tool: lastAction.tool, params: lastAction.params, result: lastAction.result };
-    }
-    return { type: "batch", tool: lastAction.tool, count: executedActions.length, results: executedActions.map((a) => ({ storeId: a.params.storeId, storeName: a.storeName || "", result: a.result })) };
   }
 
   return { type: "text", content: "Operation completed but took too many steps. Please try again." };

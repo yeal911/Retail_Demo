@@ -5,11 +5,11 @@ import {
 } from "antd";
 import {
     DashboardOutlined, ShopOutlined, LogoutOutlined, UserOutlined,
-    RobotOutlined, HistoryOutlined, ToolOutlined, SettingOutlined,
+    HistoryOutlined, ToolOutlined, SettingOutlined,
     MenuFoldOutlined, MenuUnfoldOutlined, LeftOutlined,
     LineChartOutlined, BarChartOutlined, TeamOutlined,
     ShoppingOutlined, UnorderedListOutlined, InboxOutlined,
-    ShopFilled, CloseCircleOutlined, DollarOutlined, ShoppingCartOutlined,
+    ShopFilled, CloseCircleOutlined,
 } from "@ant-design/icons";
 import { getStores } from "../api/request";
 import logo from "../assets/logo.png";
@@ -173,7 +173,7 @@ export default function Dashboard({ user, onLogout }) {
                     padding: siderCollapsed ? 0 : "0 20px",
                     borderBottom: "1px solid #f0f0f0",
                     overflow: "hidden",
-                    position: "relative",
+                    flexShrink: 0,
                 }}>
                     {siderCollapsed ? (
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", gap: 4 }}>
@@ -246,7 +246,7 @@ export default function Dashboard({ user, onLogout }) {
                         mode="inline"
                         selectedKeys={[activeMenu]}
                         onClick={({ key }) => setActiveMenu(key)}
-                        style={{ border: "none", flex: 1 }}
+                        style={{ border: "none", flex: 1, overflow: "auto" }}
                         items={isAdmin ? [
                             {
                                 key: "biz", type: "group", label: t("businessManagement"), children: [

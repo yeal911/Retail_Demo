@@ -26,13 +26,15 @@ app.get("/api/config", (req, res) => {
       llmApiUrl: process.env.LLM_API_URL || "",
       modelName: process.env.MODEL_NAME || "",
       hasApiKey: !!process.env.LLM_API_KEY,
+      proxyEnabled: process.env.LLM_PROXY_ENABLED === "true",
+      proxyUrl: process.env.LLM_PROXY_URL || "",
     },
   });
 });
 
 app.put("/api/config", (req, res) => {
   try {
-    const { llmApiUrl, modelName, apiKey } = req.body;
+    const { llmApiUrl, modelName, apiKey, proxyEnabled, proxyUrl } = req.body;
     const envPath = path.resolve("prisma", "..", ".env");
     let envContent = fs.readFileSync(envPath, "utf-8");
 
@@ -48,8 +50,17 @@ app.put("/api/config", (req, res) => {
       envContent = envContent.replace(/LLM_API_KEY=.*/g, `LLM_API_KEY=${apiKey}`);
       process.env.LLM_API_KEY = apiKey;
     }
+    if (proxyEnabled !== undefined) {
+      envContent = envContent.replace(/LLM_PROXY_ENABLED=.*/g, `LLM_PROXY_ENABLED=${proxyEnabled}`);
+      process.env.LLM_PROXY_ENABLED = String(proxyEnabled);
+    }
+    if (proxyUrl !== undefined) {
+      envContent = envContent.replace(/LLM_PROXY_URL=.*/g, `LLM_PROXY_URL=${proxyUrl}`);
+      process.env.LLM_PROXY_URL = proxyUrl;
+    }
 
     fs.writeFileSync(envPath, envContent);
+    rebuildProxyAgent(); // rebuild proxy agent with new config
     res.json({ success: true });
   } catch (error) {
     console.error("Update config error:", error);
@@ -58,6 +69,7 @@ app.put("/api/config", (req, res) => {
 });
 
 import { PrismaClient } from "@prisma/client";
+import { rebuildProxyAgent } from "./services/llmService.js";
 
 const prisma = new PrismaClient();
 
