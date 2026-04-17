@@ -2,9 +2,11 @@ import { PrismaClient } from "@prisma/client";
 import undici from "undici";
 
 const prisma = new PrismaClient();
-const LLM_API_URL = process.env.LLM_API_URL;
-const LLM_API_KEY = process.env.LLM_API_KEY;
-const MODEL_NAME = process.env.MODEL_NAME || "deepseek-chat";
+
+// Dynamic getters — read from process.env at call time so config changes take effect immediately
+const getApiUrl = () => process.env.LLM_API_URL;
+const getApiKey = () => process.env.LLM_API_KEY;
+const getModelName = () => process.env.MODEL_NAME || "deepseek-chat";
 
 // ─── Proxy Dispatcher (undici ProxyAgent, rebuilt when config changes) ──
 let proxyDispatcher = null;
@@ -14,15 +16,18 @@ export function rebuildProxyAgent() {
   const enabled = process.env.LLM_PROXY_ENABLED === "true";
   const url = process.env.LLM_PROXY_URL;
   if (enabled && url) {
+    // Allow self-signed certs through corporate proxy (applies to both proxy and tunneled connections)
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     proxyDispatcher = new undici.ProxyAgent(url, {
       connect: {
         timeout: 30_000,
-        rejectUnauthorized: false, // allow self-signed certs (corporate proxies)
+        rejectUnauthorized: false,
       },
     });
     proxyFetch = undici.fetch; // use undici's fetch (same version as ProxyAgent)
     console.log(`🔗 LLM proxy enabled: ${url}`);
   } else {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "1";
     proxyDispatcher = null;
     proxyFetch = null;
     console.log("🔗 LLM proxy disabled");
@@ -33,6 +38,10 @@ rebuildProxyAgent(); // init on startup
 // ─── LLM API Call (supports Function Calling + Proxy) ─────────────
 
 async function callLLM({ messages, tools, type, tenantId }) {
+  const LLM_API_URL = getApiUrl();
+  const LLM_API_KEY = getApiKey();
+  const MODEL_NAME = getModelName();
+
   if (!LLM_API_URL || !LLM_API_KEY || LLM_API_KEY === "your_key") {
     const fallback = "LLM not configured. Please set LLM_API_URL and LLM_API_KEY in backend/.env.";
     await prisma.llmLog.create({ data: { type, input: JSON.stringify(messages), output: fallback, model: MODEL_NAME, duration: 0, tenantId: tenantId || null } });
