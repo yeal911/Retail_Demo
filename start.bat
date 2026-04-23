@@ -10,13 +10,53 @@ echo.
 
 :: Check Node.js
 where node >nul 2>&1
+if %errorlevel% equ 0 goto :node_ok
+
+echo  Node.js is not installed. Attempting to install...
+echo.
+
+:: Method 1: Try winget (Windows 10 1809+ / Windows 11)
+where winget >nul 2>&1
+if %errorlevel% equ 0 (
+    echo  Installing Node.js LTS via winget...
+    winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements --silent
+    if %errorlevel% equ 0 (
+        echo  Node.js installed successfully!
+        :: Refresh PATH for current session
+        set "PATH=%PATH%;%ProgramFiles%\nodejs"
+        goto :node_ok
+    )
+    echo  winget install failed, trying direct download...
+)
+
+:: Method 2: Download and install via PowerShell
+echo  Downloading Node.js LTS installer...
+powershell -ExecutionPolicy Bypass -Command ^
+    "$url = (Invoke-RestRequest 'https://nodejs.org/dist/index.json' | Select-Object -First 1).version; ^
+     $ver = $url.TrimStart('v'); ^
+     $msi = \"node-v$ver-x64.msi\"; ^
+     $dl = \"https://nodejs.org/dist/v$ver/$msi\"; ^
+     Write-Host \"  Downloading Node.js v$ver...\"; ^
+     Invoke-WebRequest -Uri $dl -OutFile \"$env:TEMP\$msi\" -UseBasicParsing; ^
+     Write-Host '  Installing...'; ^
+     Start-Process msiexec.exe -ArgumentList '/i',\"$env:TEMP\$msi\",'/qn','/norestart' -Wait -NoNewWindow; ^
+     Remove-Item \"$env:TEMP\$msi\" -Force" 2>nul
+
+:: Refresh PATH after install
+set "PATH=%PATH%;%ProgramFiles%\nodejs"
+
+:: Verify installation
+where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo  [ERROR] Node.js is not installed!
-    echo  Please download and install Node.js 18+ from https://nodejs.org
+    echo.
+    echo  [ERROR] Auto-install failed. Please install Node.js manually:
+    echo  https://nodejs.org  -  Download LTS version, run installer, then re-run this script.
     echo.
     pause
     exit /b 1
 )
+
+:node_ok
 
 for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
 echo  [OK] Node.js %NODE_VER% detected

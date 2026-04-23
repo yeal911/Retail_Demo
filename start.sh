@@ -1,16 +1,46 @@
 #!/bin/bash
 
 echo ""
-echo "  ╔══════════════════════════════════════════╗"
-echo "  ║     AI Retail Copilot - One-Click Start   ║"
-echo "  ╚══════════════════════════════════════════╝"
+echo "  ============================================"
+echo "       AI Retail Copilot - One-Click Start"
+echo "  ============================================"
 echo ""
 
 # Check Node.js
-if ! command -v node &> /dev/null; then
-    echo "  [ERROR] Node.js is not installed!"
-    echo "  Please download and install Node.js 18+ from https://nodejs.org"
-    exit 1
+if command -v node &> /dev/null; then
+    NODE_VER=$(node -v)
+    echo "  [OK] Node.js $NODE_VER detected"
+else
+    echo "  Node.js is not installed. Attempting to install..."
+
+    # Method 1: Homebrew (macOS)
+    if command -v brew &> /dev/null; then
+        echo "  Installing Node.js LTS via Homebrew..."
+        brew install node@lts
+        if command -v node &> /dev/null; then
+            echo "  Node.js installed successfully!"
+        else
+            echo "  [ERROR] brew install failed."
+            echo "  Please install Node.js manually: https://nodejs.org"
+            exit 1
+        fi
+    # Method 2: apt (Ubuntu/Debian)
+    elif command -v apt &> /dev/null; then
+        echo "  Installing Node.js via apt..."
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+        sudo apt install -y nodejs
+        if command -v node &> /dev/null; then
+            echo "  Node.js installed successfully!"
+        else
+            echo "  [ERROR] apt install failed."
+            echo "  Please install Node.js manually: https://nodejs.org"
+            exit 1
+        fi
+    else
+        echo "  [ERROR] Cannot auto-install on this system."
+        echo "  Please install Node.js manually: https://nodejs.org"
+        exit 1
+    fi
 fi
 
 NODE_VER=$(node -v)
